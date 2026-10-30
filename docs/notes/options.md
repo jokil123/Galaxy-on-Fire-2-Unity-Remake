@@ -26,6 +26,8 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
 - **Story step label** (remake, `StoryStepLabel`, installed by `Bootstrap` like `FpsCounter`, its own panel; only with
   Options > Gameplay "Show story step", `Settings.ShowStoryStep`, on by default since 2026-10-11 (was off, #40); a
   player who turned it off keeps it off): bottom right in
+- **Mission veteran bonus** (Options > Gameplay, `Settings.MissionVeteranBonus`, off by default; a session rule): when on,
+  freelance mission rewards include an extra `500 * Session.FreelanceCompleted` credits, so veterans earn more per mission.
   every game scene (not the main menu, not in photo mode: `FpsCounter.Suppressed`), small and half-transparent, never
   picking: "Step 23: <StepSummaries title> · <station> #<index>" (the add-ons prefixed with the campaign, "Free play"
   without a story), refreshed twice a second, so a bug report's screenshot shows where the player was.

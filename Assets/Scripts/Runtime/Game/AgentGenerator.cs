@@ -473,6 +473,8 @@ namespace GoF2Remake.Data
             }
             int level = Math.Min(Session.Rank, 20);
             rew += 10 * level * level * level;
+            if (Settings.MissionVeteranBonus)
+                rew += Session.FreelanceCompleted * 500;
             m.bonus = type == MissionType.Purchase || type == MissionType.Challenge ? 0 : Round50(rew * MissionBonus(agent.race));
             m.reward = Round50(rew);
             int costs = (int)(m.reward / 10f + R(m.reward / 10));

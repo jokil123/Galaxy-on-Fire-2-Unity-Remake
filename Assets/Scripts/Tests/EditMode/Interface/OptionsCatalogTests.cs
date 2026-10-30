@@ -238,7 +238,7 @@ namespace GoF2Remake.Tests
         public void SessionRuleRowsShowInSinglePlayer()
         {
             foreach (var id in new[] { "cloakLosesPursuers", "empBreaksCloak", "pirateEvents", "capitalShips", "kaamoStacking",
-                                       "kaamoKeepsEquipment", "cloakBay", "informerRule" })
+                                       "kaamoKeepsEquipment", "cloakBay", "informerRule", "missionVeteranBonus" })
             {
                 var o = OptionsCatalog.All().FirstOrDefault(x => x.id == id);
                 Assert.IsNotNull(o, id);

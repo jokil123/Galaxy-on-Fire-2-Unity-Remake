@@ -445,6 +445,10 @@ namespace GoF2Remake.UI
                 () => Settings.KaamoKeepsEquipment, v => Settings.KaamoKeepsEquipment = v);
             kaamoGear.description = () => X("kaamoKeepsEquipmentHelp", "A ship parked in the Kaamo Club keeps its weapons and equipment.");
             list.Add(SessionRule(kaamoGear));
+            var veteranBonus = Toggle("missionVeteranBonus", OptionPage.Gameplay, () => X("missionVeteranBonus", "Mission veteran bonus"),
+                () => Settings.MissionVeteranBonus, v => Settings.MissionVeteranBonus = v);
+            veteranBonus.description = () => X("missionVeteranBonusHelp", "Freelance missions pay 500 extra credits for every mission you have already completed.");
+            list.Add(SessionRule(veteranBonus));
             var cloakBay = Toggle("cloakBay", OptionPage.Gameplay, () => X("cloakBay", "Cloak bay on cloaking ships"),
                 () => Settings.CloakBay, v => Settings.CloakBay = v);
             cloakBay.description = () => X("cloakBayHelp", "On the Specter and Scimitar a mounted cloak takes no equipment slot.");

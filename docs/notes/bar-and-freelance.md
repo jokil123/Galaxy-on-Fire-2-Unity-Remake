@@ -20,9 +20,10 @@ generator).
   flybys either. At index 24, launching from Thynome (10) leaves index 23's AB-1 Retractor seller with nothing to sell
   (`ModStation::OnTouchEnd`: setEvent(1) + setOfferAccepted, 858; `StationLevel.Launch`). Missions: `createMission`
   (target rules, every type once before repeats, difficulty, reward `(int(d/10*5500)+1500)*(dist/1200+1)` per type +
-  `10*level^3`, standing bonus recomputed at every chat; the taken mission pays the bonus its chat promised, whatever
-  the standing is by then, like the original's stored Mission bonus: `FreelanceMission.promisedBonus`, set by
-  `Freelance.Accept`, a player's report; older saves recompute).
+  `10*level^3`, plus with Options > Gameplay "Mission veteran bonus" (`Settings.MissionVeteranBonus`) on an extra
+  `500 * Session.FreelanceCompleted`; standing bonus recomputed at every chat; the taken mission pays the bonus its chat
+  promised, whatever the standing is by then, like the original's stored Mission bonus: `FreelanceMission.promisedBonus`,
+  set by `Freelance.Accept`, a player's report; older saves recompute).
 - **Lounge** (`LoungePanel`, `UI/Station/Lounge.uss`): one visitor billboard per agent; plates over them (race until
   talked to, then name + role; remake: always shown) and a visitor list (remake, for keys / controller); tapping opens
   the chat (`LoungeChat`): the original's texts (greeting, intro, offer, reward line, question), HD answers (green Okay

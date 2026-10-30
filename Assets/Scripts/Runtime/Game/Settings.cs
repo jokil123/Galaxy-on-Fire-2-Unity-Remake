@@ -370,6 +370,9 @@ namespace GoF2Remake.Data
         /// (Ship::hasCloakIntegrated); a cloak mounted on them goes into that bay, replacing it, instead of taking an
         /// equipment slot (Hangar.HasCloakBay). Off = the original: it takes a slot. A session rule.</summary>
         public static bool CloakBay { get => Rule(R.CloakBay, "cloakBay", true); set => SetRule(R.CloakBay, "cloakBay", value); }
+        /// <summary>Remake (players' suggestion): freelance missions pay an extra 500 credits for every freelance mission
+        /// already completed, making late-game credit earning easier. A session rule.</summary>
+        public static bool MissionVeteranBonus { get => Rule(R.MissionVeteranBonus, "missionVeteranBonus", false); set => SetRule(R.MissionVeteranBonus, "missionVeteranBonus", value); }
         /// <summary>Remake (players' suggestion): an EMP hit on a cloaked or charging cloak ends it at once (PlayerCloak.Break,
         /// NpcCloak.Break): the player's, a Specter's, another player's. Off = the original: nothing ends a cloak early. A
         /// session rule.</summary>
@@ -437,6 +440,7 @@ namespace GoF2Remake.Data
             if (GetBool("cloakBay", true)) m |= R.CloakBay;
             if (GetBool("empBreaksCloak", true)) m |= R.EmpBreaksCloak;
             if (GetBool("smarterNpcTargeting", false)) m |= R.SmarterNpcTargeting;
+            if (GetBool("missionVeteranBonus", false)) m |= R.MissionVeteranBonus;
             return R.WithCollision(m, LocalCollision);
         }
 
@@ -577,7 +581,7 @@ namespace GoF2Remake.Data
         {
             "launchCamera", "hangarFlights", "tutorialHints", "showStoryStep", "pirateEvents", "capitalShips", "kaamoStacking", "kaamoMaxLevel", "kaamoKeepsEquipment", "cloakBay", "informerOriginalRule",
             "originalTargetLock", "keepEnemyLock", "modShipTraffic", "dyingCargoMarkers", "cloakLosesPursuers", "empBreaksCloak", "smarterNpcTargeting", "shipCollision", "preciseShipCollision", "autoAdvanceDialogue", "animatedDialogue", "inputHints", "hudMode", "hudScale", "hudOpacity", "discordPresence",
-            "farShipMarkers", "markerDistance",
+            "farShipMarkers", "markerDistance", "missionVeteranBonus",
         };
         public static readonly string[] LanguageKeys = { "voiceLanguage" };
         public static readonly string[] AccessibilityKeys = { "uiScale", "uiTextScale", "uiFont", "highContrast", "reduceMotion", "colorblindMarkers" };

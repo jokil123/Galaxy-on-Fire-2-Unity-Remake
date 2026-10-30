@@ -1,4 +1,6 @@
 {
+ "missionVeteranBonus": "Mission veteran bonus",
+ "missionVeteranBonusHelp": "Freelance missions pay 500 extra credits for every mission you have already completed.",
  "mapMobileLeaves": "vertrekt over {0} min",
  "animatedDialogue": "Geanimeerde dialogen",
  "antiAliasing": "Anti-aliasing",
