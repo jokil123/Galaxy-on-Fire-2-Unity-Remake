@@ -87,7 +87,7 @@ namespace GoF2Remake.UI
             {
                 if (s.index >= suns.Length || suns[s.index] == null) continue;
                 var it = MakeItem(false);
-                it.name.text = s.name;
+                it.name.text = ItemInfo.WithTag(s.name, GameNames.SystemTag(s.index));   // remake mods: the mod's tag, dim
                 // Multiplayer: a faction holding a station here (NetFactions).
                 string faction = GoF2Remake.Multiplayer.NetFactionsClient.SystemTag(db, s.index);
                 if (faction != null) it.name.text += $" [{faction}]";
@@ -126,7 +126,7 @@ namespace GoF2Remake.UI
             foreach (var p in planets)
             {
                 var it = MakeItem(true);
-                it.name.text = StationName(p.station, false);
+                it.name.text = ItemInfo.WithTag(StationName(p.station, false), GameNames.StationTag(p.station));
                 if (GoF2Remake.Multiplayer.NetFactionsClient.Owner(p.station, out string faction, out _)) it.name.text = $"[{faction}] {it.name.text}";
                 it.name.text += SquadMark(-1, p.station);   // multiplayer: squadmates at this station
                 it.name.text += MobileMark(-1, p.station);  // remake mods: a mobile station in this orbit now
@@ -250,11 +250,19 @@ namespace GoF2Remake.UI
             systemHeader.style.opacity = systemAlpha;
             int energySystem = inSystem ? zoomSystem : selected;
             bool energy = jumpDrive && energySystem >= 0 && energySystem != currentSystem && cells > 0;
-            energyLine.style.display = energy ? DisplayStyle.Flex : DisplayStyle.None;
+            // Remake (jumpgate route planning): without a drive the line counts the gate jumps of the planned route.
+            bool route = !energy && PlansRoute && routePath != null && energySystem == selected;
+            energyLine.style.display = energy || route ? DisplayStyle.Flex : DisplayStyle.None;
             if (energy)
             {
                 energyLine.text = $"{T(578)} {cells} / {cellsInCargo}";
                 energyLine.EnableInClassList("energy-line--short", cellsInCargo < cells);
+            }
+            else if (route)
+            {
+                energyLine.text = safeRoutePath == null ? RouteJumpsText(routePath.Count - 1)
+                    : $"{RouteJumpsText(routePath.Count - 1)}  ·  {RouteSafestText}: {JumpCountText(safeRoutePath.Count - 1)}";
+                energyLine.EnableInClassList("energy-line--short", false);
             }
             touch.MarkDirtyRepaint();
         }
@@ -269,7 +277,7 @@ namespace GoF2Remake.UI
             planetLore.style.opacity = alpha;
             if (st == loreStation) return;
             loreStation = st;
-            string name = db.Stations.Find(x => x.index == st)?.name ?? "";
+            string name = ItemInfo.WithTag(db.Stations.Find(x => x.index == st)?.name ?? "", GameNames.StationTag(st));
             string sub = Modding.ModWorld.Subtitle(st);
             planetLore.Q<Label>(className: "planet-lore-title").text = string.IsNullOrEmpty(sub) ? name : $"{name} · {sub}";
             planetLore.Q<Label>(className: "planet-lore-text").text = lore;
@@ -295,7 +303,7 @@ namespace GoF2Remake.UI
                 logo.style.backgroundImage = new StyleBackground(tex);
                 logo.style.width = modRace ? 120f : tex.width; logo.style.height = modRace ? 120f : tex.height;
             }
-            root.Q<Label>("systemName").text = sys.name;
+            root.Q<Label>("systemName").text = ItemInfo.WithTag(sys.name, GameNames.SystemTag(sys.index));
             var race = root.Q<Label>("systemRace");
             race.text = owned ? GoF2Remake.Flight.Standing.RaceName(sys.raceId) : "";
             race.style.display = owned ? DisplayStyle.Flex : DisplayStyle.None;
@@ -332,7 +340,8 @@ namespace GoF2Remake.UI
                 DrawSegment(p2d, suns[currentSystem].position, target + t * (suns[currentSystem].position - target));
             }
         }
-        /// <summary>StarMap::draw, mission mode: the route segment by segment on the pulse's cycle (+0xe8 advances when t wraps).</summary>
+        /// <summary>StarMap::draw, mission mode: the route segment by segment on the pulse's cycle (+0xe8 advances when t wraps).
+        /// Remake: also the planned gate route to the selection on the station's and the gate's maps (PlanRoute).</summary>
         void DrawMissionRoute(Painter2D p2d, float t)
         {
             if (routePath == null || routePath.Count < 2) return;
@@ -340,6 +349,16 @@ namespace GoF2Remake.UI
             lastRouteT = t;
             float a = fade / 255f;
             p2d.lineWidth = 3f;
+            // Remake: the safest route, where it differs, steady in the Secure colour under the fastest one.
+            if (safeRoutePath != null)
+            {
+                p2d.strokeColor = new Color(0f, 237f / 255f, 0f, a * 0.8f);
+                for (int i = 0; i + 1 < safeRoutePath.Count; i++)
+                {
+                    var from = suns[safeRoutePath[i]]; var to = suns[safeRoutePath[i + 1]];
+                    if (from != null && to != null) DrawSegment(p2d, from.position, to.position);
+                }
+            }
             p2d.strokeColor = new Color(1f, 1f, 0f, a);
             for (int i = 0; i < routeSegment; i++)
             {

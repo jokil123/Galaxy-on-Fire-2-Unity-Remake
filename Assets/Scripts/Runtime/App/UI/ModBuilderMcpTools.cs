@@ -9,7 +9,8 @@
 //   compile_quest / validate / get_quest_schema   the game's own checks: QuestFile, EventRunner, the mod loaders
 //   play_test / end_play_test   ModBuilderPlay; get_log, screenshot; undo / redo; show_kind
 //   (seeing and driving the builder: ModBuilderMcpVision; the game's sounds and voice lines, .aem models, optimize,
-//   import_mod, replace_game_character: ModBuilderMcpContent; the mod's own races: ModBuilderMcpRaces)
+//   import_mod, replace_game_character: ModBuilderMcpContent; the mod's own races: ModBuilderMcpRaces; the modding guide,
+//   read_guide and the resources: ModBuilderMcpGuide)
 
 using System;
 using System.Collections.Generic;
@@ -38,10 +39,12 @@ namespace GoF2Remake.UI
             ("characters", "characters.json", "id", ModBuilder.Kind.Characters),
             ("systems", "systems.json", "id or override", ModBuilder.Kind.Systems),
             ("stations", "stations.json", "id or override", ModBuilder.Kind.Stations),
+            ("npcShips", "npcships.json", "id (a new capital ship, freighter or boss) or override (battleship, carrier, vossk_battleship, freighter, pirate_boss or a mod's \"mod:id\")", ModBuilder.Kind.NpcShips),
             ("races", "races.json", "id (a race of the mod's own; list_races / put_race / set_race / delete_race work on them too)", ModBuilder.Kind.Races),
             ("interiors", "interiors.json", "id", ModBuilder.Kind.Interiors),
             ("blueprints", "blueprints.json", "id", ModBuilder.Kind.Blueprints),
             ("kits", "shipkits.json", "id (a kit of ship parts; a ships.json ship flies it with kit / kitType / build)", ModBuilder.Kind.Kits),
+            ("weaponEffects", "weaponfx.json", "id (a look and sound of its own, from its base weapon's; an item takes it with \"fx\": \"<id>\")", ModBuilder.Kind.WeaponFx),
             ("gameOptions", "gameoptions.json", "id", ModBuilder.Kind.Campaigns),
             ("missions", "events/<name>.gof2mission", "name (the file name: letters, digits, _)", ModBuilder.Kind.Quests),
             ("campaign", "campaign.json", "(one per mod)", ModBuilder.Kind.Campaigns),
@@ -75,7 +78,7 @@ namespace GoF2Remake.UI
         // ---- the table ------------------------------------------------------------------------------------------
 
         static List<Tool> tools;
-        static List<Tool> Tools => tools ??= MakeTools().Concat(VisionTools()).Concat(ContentTools()).Concat(RaceTools()).ToList();
+        static List<Tool> Tools => tools ??= MakeTools().Concat(VisionTools()).Concat(ContentTools()).Concat(RaceTools()).Concat(GuideTools()).ToList();
 
         static List<Tool> MakeTools() => new List<Tool>
         {
@@ -243,7 +246,8 @@ namespace GoF2Remake.UI
                     ["entries"] = new JObject
                     {
                         ["ships"] = p.Ships.Count, ["items"] = p.Items.Count, ["characters"] = p.Characters.Count, ["systems"] = p.Systems.Count,
-                        ["stations"] = p.Stations.Count, ["interiors"] = p.Interiors.Count, ["races"] = p.Races.Count, ["blueprints"] = p.Blueprints.Count, ["kits"] = p.Kits.Count,
+                        ["stations"] = p.Stations.Count, ["npcShips"] = p.NpcShips.Count, ["interiors"] = p.Interiors.Count, ["races"] = p.Races.Count, ["blueprints"] = p.Blueprints.Count, ["kits"] = p.Kits.Count,
+                        ["weaponEffects"] = p.WeaponEffects.Count,
                         ["gameOptions"] = p.GameOptions.Count, ["missions"] = p.Quests.Count, ["campaign"] = p.Campaign != null,
                     },
                     ["dependencies"] = new JArray(p.Dependencies),

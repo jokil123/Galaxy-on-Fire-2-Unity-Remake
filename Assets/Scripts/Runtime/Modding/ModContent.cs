@@ -51,6 +51,8 @@ namespace GoF2Remake.Modding
         }
 
         public const string ItemsFile = "items.json";
+        /// <summary>The mod's weapon effects (Modding.ModWeapons): looks and sounds an item takes with "fx": "<id>".</summary>
+        public const string WeaponEffectsFile = "weaponfx.json";
 
         /// <summary>One entry of a mod's items.json.</summary>
         public class ItemDef
@@ -90,6 +92,8 @@ namespace GoF2Remake.Modding
             public readonly List<ModBlueprints.Def> blueprints = new List<ModBlueprints.Def>();
             public readonly List<ModWorld.Def> systems = new List<ModWorld.Def>(), stations = new List<ModWorld.Def>();
             public readonly List<ModRaces.Def> races = new List<ModRaces.Def>();
+            public readonly List<ModEncounters.Def> encounters = new List<ModEncounters.Def>();   // a cruise drive's encounters
+            public readonly List<ModNpcShips.Def> npcShips = new List<ModNpcShips.Def>();   // npcships.json: capital ships, freighters, bosses
             public readonly Dictionary<string, Dictionary<string, string>> text =
                 new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);   // language -> key -> text
         }
@@ -137,6 +141,8 @@ namespace GoF2Remake.Modding
                 ParseShips(mod, p);
                 ModBlueprints.Parse(mod, p.blueprints);
                 ModRaces.Parse(mod, p.races);
+                ModEncounters.Parse(mod, p.encounters);
+                ModNpcShips.Parse(mod, p.npcShips);
                 ModWorld.Parse(mod, p.systems, p.stations);
                 foreach (var f in mod.Source.FilesIn("text", ".json"))
                 {
@@ -155,8 +161,24 @@ namespace GoF2Remake.Modding
         {
             "id", "override", "base", "name", "description", "techLevel", "occurrence", "stock", "minPrice", "maxPrice", "price",
             "lowestPriceSystem", "highestPriceSystem", "vosskOnly", "alwaysSoldAt", "stats", "attributes", "defaultEconomy", "fx", "icon",
-            "available",
+            "available", "tractorColor",
         };
+
+        /// <summary>items.json "tractorColor" ("#rrggbb", "rrggbb" or [r, g, b] 0-255) as attribute 136's value
+        /// (0x1000000 | rgb; Flight.CombatRadar tints the beams), -1 = not a colour.</summary>
+        public static int TractorColorValue(JToken t)
+        {
+            if (t is JValue v && v.Type == JTokenType.String)
+            {
+                string s = ((string)v).Trim().TrimStart('#');
+                if (s.Length == 6 && int.TryParse(s, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out int rgb))
+                    return 0x1000000 | rgb;
+                return -1;
+            }
+            if (t is JArray a && a.Count == 3 && a.All(x => x.Type == JTokenType.Integer && (int)x >= 0 && (int)x <= 255))
+                return 0x1000000 | ((int)a[0] << 16) | ((int)a[1] << 8) | (int)a[2];
+            return -1;
+        }
 
         static void ParseItems(ModInfo mod, Parsed p)
         {
@@ -350,6 +372,8 @@ namespace GoF2Remake.Modding
             // "stock": how many units a shop holds (Shop.ModStock), a number or [least, most].
             if (Range(o, "stock", out int smin, out int smax) && (smin < 1 || smax < smin || smax > Shop.MaxStock))
                 mod.Warnings.Add($"{where}: \"stock\" {smin} to {smax} must be 1 to {Shop.MaxStock}, least first (clamped)");
+            if (ModJson.Get(o, "tractorColor") is JToken tc && TractorColorValue(tc) < 0)
+                mod.Warnings.Add($"{where}: \"tractorColor\" must be \"#rrggbb\" or [r, g, b] (0-255): ignored");
             if (ModJson.Get(o, "stats") is JToken st)
             {
                 if (!(st is JObject so)) throw new ModJsonException($"{where}: \"stats\" must be an object {{ \"damage\": 12 }}");

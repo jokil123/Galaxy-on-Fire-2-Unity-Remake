@@ -35,6 +35,7 @@ namespace GoF2Remake.Modding
             }
             foreach (var s in Systems) { string id = s.IsOverride ? s.OverrideRef : s.LocalId; if (id != null) list.Add(($"systems.{id}.name", s.Name ?? "")); }
             foreach (var s in Stations) { string id = s.IsOverride ? s.OverrideRef : s.LocalId; if (id != null) list.Add(($"stations.{id}.name", s.Name ?? "")); }
+            foreach (var s in NpcShips) { string id = s.IsOverride ? s.OverrideRef?.Replace(':', '_') : s.LocalId; if (id != null) list.Add(($"npcships.{id}.name", s.Name ?? "")); }
             // Remake: a mod race's texts (ModRaces reads "races.<id>.name" / ".description").
             foreach (var r in Races.Where(r => r.Id != null))
             {
@@ -144,7 +145,7 @@ namespace GoF2Remake.Modding
                 p.Modified = Directory.GetLastWriteTimeUtc(folder);
                 foreach (var f in new[] { ModManifest.FileName, ModContent.ShipsFile, ModContent.ItemsFile, ModCharacters.File, BuilderFile,
                                           ModWorld.SystemsFile, ModWorld.StationsFile, InteriorsFile, ModBlueprints.File, ModGameOptions.File, CampaignFile, ProjectKit.File,
-                                          ModRaces.File, ModRaces.OldFile })
+                                          ModRaces.File, ModRaces.OldFile, ModContent.WeaponEffectsFile, ModNpcShips.File })
                 {
                     string path = Path.Combine(folder, f);
                     if (File.Exists(path)) { var t = File.GetLastWriteTimeUtc(path); if (t > p.Modified) p.Modified = t; }
@@ -167,7 +168,9 @@ namespace GoF2Remake.Modding
                 p.ReadList(File.Exists(Path.Combine(folder, ModRaces.File)) ? ModRaces.File : ModRaces.OldFile, o => p.Races.Add(new ProjectRace(o)));
                 p.ReadList(ModBlueprints.File, o => p.Blueprints.Add(new ProjectBlueprint(o)));
                 p.ReadList(ProjectKit.File, o => p.Kits.Add(new ProjectKit(o)));
+                p.ReadList(ModContent.WeaponEffectsFile, o => p.WeaponEffects.Add(new ProjectWeaponEffect(o)));
                 p.ReadList(ModGameOptions.File, o => p.GameOptions.Add(new ProjectGameOption(o)));
+                p.ReadList(ModNpcShips.File, o => p.NpcShips.Add(new ProjectNpcShip(o)));
                 string campaign = Path.Combine(folder, CampaignFile);
                 if (File.Exists(campaign))
                 {
@@ -221,7 +224,9 @@ namespace GoF2Remake.Modding
             if (File.Exists(Path.Combine(Folder, ModRaces.OldFile))) File.Delete(Path.Combine(Folder, ModRaces.OldFile));   // the old name, now races.json
             WriteList(ModBlueprints.File, Blueprints.Select(c => c.ToJson()));
             WriteList(ProjectKit.File, Kits.Select(c => c.ToJson()));
+            WriteList(ModContent.WeaponEffectsFile, WeaponEffects.Select(c => c.ToJson()));
             WriteList(ModGameOptions.File, GameOptions.Select(c => c.ToJson()));
+            WriteList(ModNpcShips.File, NpcShips.Select(c => c.ToJson()));
             string campaign = Path.Combine(Folder, CampaignFile);
             if (Campaign != null) Write(CampaignFile, Campaign.ToJson().ToString(Formatting.Indented));
             else if (File.Exists(campaign)) File.Delete(campaign);

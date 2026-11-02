@@ -9,6 +9,16 @@
 // face with the front at its bottom edge, the down face with the front at its top edge). Mip level 0 (no seam at the
 // panorama's wrap, no bleeding between the strip's faces: the face coordinates stay half a texel inside).
 // SRP Batcher compatible (2026-10-22): every per-material value in the UnityPerMaterial buffer.
+// Remake: the warp (Visuals.WarpSky, globals, so every system's and mod's sky has it): the sky itself is stretched round the
+// flight, as EVERSPACE 2's travel mode bends it. The sky is read in polar coordinates about _WarpAxis with the angle squeezed,
+// so a little of it runs out in long radial streaks, in two phases half a cycle apart that crossfade so the flow never ends;
+// the noise shades it into bands, the centre stays calm. Nothing is added to it: lines over it, spread by bloom, were white
+// streaks (the user: only the stretching). At _WarpLevel 0 it is exactly the plain sky, so the warp starts and ends without a
+// cut, and everything else draws over it as ever. It takes after the Khador Drive's animation between the systems only
+// (_WarpKhador): the sky leans to that fx's ice blue, and that fx's vein web is GoF2/WarpWeb, over the planets. A cruise in an
+// orbit is the plain stretch.
+// _SkyBlend: another system's sky over this one (World.InterstellarField, approaching it), its layers set as globals with
+// runtime modes in place of the keywords, so an arrival finds the sky it was already flying in.
 Shader "GoF2/SpaceSky"
 {
     Properties
@@ -36,20 +46,10 @@ Shader "GoF2/SpaceSky"
             #pragma multi_compile_local _ _STARS_PANORAMA _STARS_STRIP
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            TEXTURECUBE(_Stars);  SAMPLER(sampler_Stars);
-            TEXTURECUBE(_Nebula); SAMPLER(sampler_Nebula);
-            TEXTURE2D(_StarsMap);  SAMPLER(sampler_StarsMap);
-            TEXTURE2D(_NebulaMap); SAMPLER(sampler_NebulaMap);
-
-            CBUFFER_START(UnityPerMaterial)
-                float4x4 _SkyRotation;   // world direction -> baked cube direction, set by OrbitBuilder.SetupSky
-                float4 _StarsMap_TexelSize;
-                float4 _NebulaMap_TexelSize;
-                half _Exposure, _StarsGain, _NebulaGain;
-            CBUFFER_END
+            #include "Assets/Shaders/SpaceSkyCore.hlsl"
 
             struct Attributes { float4 positionOS : POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            struct Varyings { float4 positionCS : SV_POSITION; float3 dir : TEXCOORD0; UNITY_VERTEX_OUTPUT_STEREO };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 world : TEXCOORD0; UNITY_VERTEX_OUTPUT_STEREO };
 
             Varyings vert(Attributes i)
             {
@@ -57,68 +57,14 @@ Shader "GoF2/SpaceSky"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 o.positionCS = TransformObjectToHClip(i.positionOS.xyz);
-                o.dir = mul((float3x3)_SkyRotation, i.positionOS.xyz);
+                o.world = i.positionOS.xyz;
                 return o;
-            }
-
-            // Equirectangular: u around (0.5 = +Z, 0.75 = +X), v up (0.5 = the horizon).
-            float2 PanoramaUV(float3 d)
-            {
-                return float2(atan2(d.x, d.z) * (0.5 / PI) + 0.5, asin(clamp(d.y, -1.0, 1.0)) / PI + 0.5);
-            }
-
-            // A 6:1 strip: the face and its coordinates (u to the right, v up as seen from inside), kept half a texel in.
-            float2 StripUV(float3 d, float4 texel)
-            {
-                float3 a = abs(d);
-                float face; float2 f;
-                if (a.x >= a.y && a.x >= a.z)
-                {
-                    if (d.x > 0) { face = 0; f = float2(-d.z, d.y) / a.x; }   // right: its right is -Z
-                    else { face = 1; f = float2(d.z, d.y) / a.x; }            // left: its right is +Z
-                }
-                else if (a.y >= a.z)
-                {
-                    if (d.y > 0) { face = 2; f = float2(d.x, -d.z) / a.y; }   // up: the front at the bottom
-                    else { face = 3; f = float2(d.x, d.z) / a.y; }            // down: the front at the top
-                }
-                else
-                {
-                    if (d.z > 0) { face = 4; f = float2(d.x, d.y) / a.z; }    // front
-                    else { face = 5; f = float2(-d.x, d.y) / a.z; }           // back: its right is -X
-                }
-                float2 uv = f * 0.5 + 0.5;
-                float inset = 0.5 * texel.y;   // half a texel of the face (its height is the image's)
-                uv = clamp(uv, inset, 1.0 - inset);
-                return float2((face + uv.x) / 6.0, uv.y);
-            }
-
-            half3 Layer(TEXTURECUBE_PARAM(cube, cubeSampler), TEXTURE2D_PARAM(map, mapSampler), float4 texel, float3 d, int mode)
-            {
-                if (mode == 1) return SAMPLE_TEXTURE2D_LOD(map, mapSampler, PanoramaUV(normalize(d)), 0).rgb;
-                if (mode == 2) return SAMPLE_TEXTURE2D_LOD(map, mapSampler, StripUV(d, texel), 0).rgb;
-                return SAMPLE_TEXTURECUBE(cube, cubeSampler, d).rgb;
             }
 
             half4 frag(Varyings i) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
-                #if defined(_STARS_PANORAMA)
-                    const int starsMode = 1;
-                #elif defined(_STARS_STRIP)
-                    const int starsMode = 2;
-                #else
-                    const int starsMode = 0;
-                #endif
-                #if defined(_NEBULA_PANORAMA)
-                    const int nebulaMode = 1;
-                #elif defined(_NEBULA_STRIP)
-                    const int nebulaMode = 2;
-                #else
-                    const int nebulaMode = 0;
-                #endif
-                half3 c = Layer(TEXTURECUBE_ARGS(_Stars, sampler_Stars), TEXTURE2D_ARGS(_StarsMap, sampler_StarsMap), _StarsMap_TexelSize, i.dir, starsMode) * _StarsGain
-                        + Layer(TEXTURECUBE_ARGS(_Nebula, sampler_Nebula), TEXTURE2D_ARGS(_NebulaMap, sampler_NebulaMap), _NebulaMap_TexelSize, i.dir, nebulaMode) * _NebulaGain;
+                half3 c = _WarpLevel > 0.001 ? Warp(normalize(i.world), normalize(_WarpAxis), _WarpLevel, _WarpKhador) : Sky(i.world);
                 return half4(c * _Exposure, 1);
             }
             ENDHLSL

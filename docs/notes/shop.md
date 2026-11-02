@@ -29,14 +29,20 @@ ship trade); the UI is `HangarWindow` (tabs Ship / Shop in `UI/Station`, styles 
   per item (`Shop.PriceList`, `NetSession.Active`); single player keeps the original's, verified identical to
   `prices.py` (its docking's prices pinned, `Hangar.PinPrices`). Selling pays the buying price (a faction member at its
   own station sells at the 10 % cut too, `Hangar.Sell`); anything sold joins the station's stock. Loma (system 25)
-  always charges the maximum. Remake: an item's price is fixed for the docking (`Hangar.PinPrices`, cleared by
+  always charges the maximum in the Android 2.0.16 build; the iOS 1.1.19 build charges `(int)(maxPrice x 1.05)`
+  (`Status::calcCargoPrices`, the Android disassembly has no multiply), which the remake applies with the Default
+  economy (`Session.Economy`), the Android economy keeping the maximum. Remake: an item's price is fixed for the docking (`Hangar.PinPrices`, cleared by
   `Hangar.NewDocking` in `StationLevel`): an item's price depends on its place in the lists, so a trade moving it
   between the stock and the hold could shift it by up to ±2 %, and in multiplayer, where the window is priced again
   after every trade, buying and selling at once made money with every click.
 - **Stock** (`Generator::getItemBuyList`) and **dealer ships** (`getShipBuyList`) are rolled with `UnityEngine.Random`
   when the station isn't among the last 3 (`Status::departStation`: arriving in its orbit, `Shop.ArriveInOrbit` from
   `SpaceLevel`, or docking; a revisit doesn't reorder the stack; the remake pushed only on docking until 2026-10-16, so
-  Katashán's empty dealer, `getShipBuyList`'s 1 in 6, stayed until 3 other dockings; not in multiplayer sessions);
+  Katashán's empty dealer, `getShipBuyList`'s 1 in 6, stayed until 3 other dockings; not in multiplayer sessions;
+  the iOS 1.1.19 build rolls 2..5 ships, never none, and rolls a duplicate again: the Default economy does the same, as
+  it takes that build's stock factor (step + 10) / 45, its 40 % AB-1 Retractor in every shop during steps 17..24 and its
+  exhaust anchors for the VoidX / H'Soc / Specter / Scimitar, `weapons_hd_default.json` over `weapons_hd.json` in
+  `Database.ApplyDefaultEconomy`, built by `Reference/tools/shop/build_default_mounts.py` from the IPA's `weapons_hd.bin`);
   re-docking after > 30 s nibbles 0-2 units off each row.
 - **Cargo:** every unit is 1 t, mounted items weigh nothing; buying never checks space, launching is refused while overloaded.
 - **Unknown item numbers** (a Windows crash report, 2026-10-12: `ItemInfo.Category` on a null item from `HangarWindow.AddRow`
@@ -86,6 +92,28 @@ ship trade); the UI is `HangarWindow` (tabs Ship / Shop in `UI/Station`, styles 
   header; a a passenger cabin can't be demounted while the other cabins couldn't seat the passengers aboard (323,
   `HangarWindow::selectItem` 0x178e20); a double click / double tap mounts or demounts (the Mount / Demount button's
   action; a controller's confirm button does the same).
+- **Slot positions** (players' feedback 2026-11: the gear "snapped" to the next free slot, the original's didn't):
+  `Ship+0x6c` is one place per slot, null when empty. `Ship::removeEquipment` 0x1a3e4c empties the slot and leaves
+  the others where they are; `Ship::addEquipment` 0x1a4088 fills the type's first empty one; `Level::createPlayer` puts
+  each gun on the mount of its slot (`Gun::setOffset(mounts[Ship::getSlotPos])`). The remake's list kept no gaps until
+  then, so a demount moved every later gun one mount along. Now `ItemStack.slot` (1-based, 0 = none yet: the first free
+  one, so old saves keep their order) holds it: `Hangar.SlotPositions` reads it, `PinSlots` writes it before every
+  mount / demount / swap and in `SyncBuiltIn` (levels start, docking), so an item used up in flight leaves its slot
+  empty too. `Hangar.MountOrder` (built-ins first, then the slots, -1 for a gap) is what `WeaponSystem.Setup` (guns in
+  slot order, the secondaries' selection order too) and `ModHardpoints.WeaponItems` (null for a gap: kit weapon models,
+  pylon nodes, the parking height) read; `NetPlayer.PackWeapons` sends a gap as -1 (an older peer skips it: its weapons
+  side by side). The Ship tab lists each slot in place (`Hangar.SlotsOfType`, Empty slot rows between). A swap (287)
+  puts the new item in the old one's slot. `FitToSlots` drops what sits in the last slots and moves an item past a
+  smaller hull's slots into an empty one below; a new hull (`SwitchTo`) takes the gear in its slots' order, packed. Turrets
+  keep the original's single turret position. Remake: MOVE (`shopMoveSlot`, the second action button in cyan, X / the
+  controller's X, `Hangar.NextSlot` / `MoveToSlot`) takes a mounted item to the next slot of its type (the last to the
+  first), changing places with the item there; with the mouse or a pen a mounted row dragged onto another slot row of its
+  type does the same (`HangarWindow.HookSlotDrag`; touch keeps the list's scrolling). Tests `HangarSlotTests`. Not tested
+  in multiplayer.
+- **Shop icons** (`Resources/GoF2Icons`, players' report 2026-11: less sharp than the original's): the same 178 x 86
+  cells the original's HD build draws, but imported at normal quality (DXT5), whose 4x4 blocks smeared the striped
+  frames and fine lines. `ImportPostprocessor.ShopIcon` imports the folder as BC7 (ASTC 4x4 on Android), the same size in
+  memory, no mipmaps. The lists still draw them at 0.8-2x (148 x 72 rows at 1080p, larger with the screen).
 - **Hangar opened with A / Enter** (#104, `StationMenu.hangarConfirmHeld`): the window ignores Enter / A until the press that
   opened it is released; the Hangar button took the press, and in the same frame the window bought its first row.
 - **Ships:** price -1 % in systems of the ship's race; trade-in at full price; remake (players' report), in a
@@ -127,7 +155,8 @@ ship trade); the UI is `HangarWindow` (tabs Ship / Shop in `UI/Station`, styles 
 - The Supernova wrecks' hidden blueprints (hacking): see "Supernova add-on".
 - **Dealer extras** (`Shop.GenerateShips`, `getShipBuyList` 0xa0eb8): none in the supernova system (no stock either);
   Kothar after Valkyrie exactly 37 / 38 / 40; Quineros (107) every pirate ship plus 45-48 for the terminated Most Wanted
-  6 / 12 / 18 / 24; Thynome (10) the VoidX alone with every gold medal (re-rolled on docking); a roll of 0 ships gives
+  6 / 12 / 18 / 24; Thynome (10) the VoidX alone with every gold medal (re-rolled on docking; remake, a modder's request
+  2026-11-02: the VoidX first beside the dealer's usual roll, see docs/notes/mods.md); a roll of 0 ships gives
   none; after Valkyrie the Vossk dealers 1/2 each 39 / 41 and every Vossk fighter roll 60 / 25 / 15 % 9 / 41 / 39
   (`NpcTables.RandomFighter`, traffic too); Katashán (120) after 158: 44 (Extreme or all Supernova medals) and 49.
   Docking fix-ups (`Story.OnDocked`): 50 Void Crystals at Thynome after the game is won for a player without a Khador

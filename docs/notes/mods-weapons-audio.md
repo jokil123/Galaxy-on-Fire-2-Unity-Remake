@@ -32,6 +32,14 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   unit long. Test `ModWeaponsTests.ABeamsSpriteRunsAlongTheBeamFacingTheCamera`; checked in an off-screen render. Loaded in the background with the rest
   (`ModLoading`, the menu's `Preload`). Verified in Play mode: the example's Plasma Lance (fired: violet bolts stretched
   along their flight, the flash at the gun, the ring impact, its own shot sound).
+- **Weapon effects** (2026-11-01, the user's request: the Weapon fx kind adds whole effects and changes a game weapon's):
+  `weaponfx.json` (`ModContent.WeaponEffectsFile`, `ModWeapons.Effects`): { "id", "name", "base", the fx fields }, keyed
+  "mod id:id"; an item takes one with items.json `"fx": "<id>"` / `"<mod id>:<id>"` (`ParseEffect`: `File` is weaponfx.json
+  meanwhile, for the messages; "id" / "name" / "base" no unknown fields), or a game weapon's whole look with `"fx": <item
+  number>` (a Def with only `look`). `Def.look` = the effect's base: `LoadOne` copies that item's WeaponFx parts, shots and
+  blast sounds over the item's own base copy before the effect's parts apply (so "the base's" part means the effect's
+  base), keeping the item's turret model and explosion type. The builder project's effects are also built on their own on
+  their base weapon (`Def.effect`, `ModWeapons.Effect(key)`) for the range. Tests `ModWeaponEffectsTests`.
 - **Missile turrets and salvos** (remake, for mods; a modder's missile turret, 2026-10-14, whose own source patch was
   folded in this way): stats `missiles` 105 (a plain gun's / turret's shots are homing missiles, `Gun.missiles`: `Homing`,
   `IsMissile` = the rocket burst on a hit (`GunRig.ShowImpact`) and the rocket smoke trail (`RocketTrail.For`), no shrink;
@@ -96,7 +104,9 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   the file's first bytes (`ModAudio.Sniff`: RIFF/WAVE, OggS, ID3 / an MPEG frame sync), the extension only when they
   show none: every platform's file picker copies to "picked.tmp", so the Mod Builder's `ModProject.SetAudio` saved every
   picked WAV / MP3 as .ogg and it "couldn't be played" (a player's report, 2026-10-24); `PickAudio` now hands it a copy
-  named by its type. Tests `ModAudioTypeTests`.
+  named by its type. Tests `ModAudioTypeTests`. The content decides before the name is checked (`ModAudio.TypeOf(file,
+  sniffed)`, #208): the Weapon fx page's "Sound file…" had saved a picked sound as `fx/<item>.tmp` (`AddFile` keeps the
+  copy's extension), which the name alone refused, so the weapon kept its game sound on the new build too.
 - **Ship and weapon sounds** (`ModShipSounds`): ships.json `"sounds"` (a new ship or an override; `ShipDef.sounds`,
   `ModContent.ShipSounds`) = engine / boostStart / boostLoop / boostStop / charger, each a file, a list (random) or { file(s),
   volume, pitch } with a value or [from, to]; a kit hardpoint rule's `"sound"` { shot, loop, release } (`Rule.sound`,
@@ -120,11 +130,11 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   included (`ModVoices.Replacement`, which `StoryAssets.Voice` asks first; loaded with the mods, `ModLoading`); mod lines
   and replacements in `voices/<language>/` for any of `LanguageTables.Offered` (`ModVoices.Languages`: with the voice option
   on auto the text language, then the game's bank de / en), `voices/` for every language. Builder: Audio's + New sound,
-  + Voice line / + Replace a game line with a language picker (each language's flag, a globe for every language:
+  + Voice line / Replace a game line with a language picker (each language's flag, a globe for every language:
   `UI.LanguageFlags`, painted in code, the game has no flag images); the pickers of the game's tracks, sounds and lines
   play each on ▶ (`ShowAudioPicker`: `Modding.GameAudioIndex`, Resources/GoF2ModBuilder, from GoF2 > Build > Mod Builder
   Audio Previews; `StoryAssets.OriginalVoice`; the quests' Sound step too), the station's music fading out meanwhile
-  and back in 3 s after the last one (`StationLevel.MusicHeld`); Characters' + Replace a game character (the speaker's own
+  and back in 3 s after the last one (`StationLevel.MusicHeld`); Characters' Replace a game character (the speaker's own
   portrait rendered to a PNG, `Portrait.RenderSpeaker`, and name). Tests `ModAudioNamesTests`.
 - **Voice-over** (`ModVoices`, `ModAudio`): "[voice <clip>]" in a Dialog page or a Radio line (`ModVoices.Take` in
   `NetAdmin.Apply`'s Dialog / Radio orders); the clip is an original voice line by its event name or a mod's

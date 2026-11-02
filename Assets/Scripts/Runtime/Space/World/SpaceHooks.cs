@@ -132,6 +132,9 @@ namespace GoF2Remake.World
         /// <summary>The player hacked a wreck in this orbit (station, the wreck's name): an event's or quest's "on hacked"
         /// (EventRunner.OnWreckHacked; in a session through NetState.WreckHackedRpc).</summary>
         public static Action<int, string> WreckHacked;
+        /// <summary>Remake mods: the player docked at a station's pad outside (station): an event's or quest's "on pad"
+        /// (EventRunner.OnPadDocked; in a session through NetState.PadDockedRpc).</summary>
+        public static Action<int> PadDocked;
         /// <summary>A line in the multiplayer chat as a notice (NetChat.Notice).</summary>
         public static Action<string> Notice;
 
@@ -170,6 +173,10 @@ namespace GoF2Remake.World
         public static Func<ulong, string> HelpSquadmate;
         /// <summary>Arriving by travel at a squadmate's distress call: beside them.</summary>
         public static StationPoseQuery DistressArrival;
+        /// <summary>Follow a squadmate from orbit to orbit, or stop when it is the one followed (by client id; its message);
+        /// the one followed (ulong.MaxValue = nobody). Multiplayer.NetFollow.</summary>
+        public static Func<ulong, string> FollowSquadmate;
+        public static Func<ulong> FollowedSquadmate;
         /// <summary>A teleport's pose for this arrival (NetTeleport.TakePose).</summary>
         public static PoseQuery TeleportPose;
 
@@ -195,6 +202,8 @@ namespace GoF2Remake.World
 
         /// <summary>An event's Restrict Travel.</summary>
         public static Func<bool> EventNoDocking, EventNoJumps;
+        /// <summary>An event's Restrict Travel "khador": the Khador Drive (and the slipstream) only.</summary>
+        public static Func<bool> EventNoKhador;
         /// <summary>An event's cutscene holds the camera / makes the player invulnerable.</summary>
         public static Func<bool> EventCinematic, EventInvulnerable;
         /// <summary>An event's question is on screen: the controls and keys rest.</summary>
@@ -209,8 +218,32 @@ namespace GoF2Remake.World
         public static Func<float, bool> RespawnDue;
         public static Action Respawn;
 
+        // ---- the co-op campaign (NetCoop; CampaignLevel's leader and follower) ------------------------------------------
+
+        /// <summary>The leader's story level now (a few times a second while it runs): out to the crew in that orbit.</summary>
+        public static Action<CoopLevelState> CoopLevelState;
+        /// <summary>The leader's level showed radio line 'line' of step 'index' in 'station'.</summary>
+        public static Action<int, int, int> CoopRadioShown;
+        /// <summary>The leader's level route changed (station, points in game units, the index reached).</summary>
+        public static Action<int, List<Vector3>> CoopRoute;
+        /// <summary>The leader's cutscene camera (station, position, rotation, field of view).</summary>
+        public static Action<int, Vector3, Quaternion, float> CoopCamera;
+        /// <summary>The leader's level moved it on (station left, station reached, docked, by travel).</summary>
+        public static Action<int, int, bool, bool> CoopTravel;
+        /// <summary>The leader's level in 'station' failed (or the leader died in it): the crew's failure.</summary>
+        public static Action<int> CoopLevelFailed;
+        /// <summary>This game's story conversation opened / closed (the leader holds its level meanwhile).</summary>
+        public static Action<bool> CoopDialog;
+        /// <summary>The leader: a crew member in 'station' has a story conversation open (the level holds).</summary>
+        public static Func<int, bool> CoopHold;
+        /// <summary>The leader flies in 'station' (a follower's level waits for it).</summary>
+        public static Func<int, bool> CoopLeaderHere;
+        /// <summary>The leader's ship's pose in 'station' (false = not there).</summary>
+        public static StationPoseQuery CoopLeaderPose;
+
         public static bool NoDocking => EventNoDocking != null && EventNoDocking();
         public static bool NoJumps => EventNoJumps != null && EventNoJumps();
+        public static bool NoKhador => EventNoKhador != null && EventNoKhador();
         public static bool Cinematic => EventCinematic != null && EventCinematic();
         public static bool Invulnerable => EventInvulnerable != null && EventInvulnerable();
         public static bool QuestionOpen => EventQuestionOpen != null && EventQuestionOpen();
@@ -228,6 +261,10 @@ namespace GoF2Remake.World
         public static Func<Camera> VrEye;
         /// <summary>A dedicated server switches the menu scene off (DedicatedServer.ShutOff): true = it did.</summary>
         public static Func<Scene, bool> ServerShutOff;
+        /// <summary>A level swap keeps the flight HUD (FlightHud.KeepForSwap): out of the old scene before it goes, the new
+        /// scene's own HUD gone before it builds a panel, the kept one into the new scene once that is active.</summary>
+        public static Action KeepHud, DropNewHud;
+        public static Action<Scene> SettleHud;
         /// <summary>The scene's fog (Bootstrap.SetSceneFog: off below Quality High).</summary>
         public static Action<bool> SetSceneFog;
         /// <summary>A temporal upscaler (STP, DLSS, FSR 2+, MetalFX Temporal) is active.</summary>

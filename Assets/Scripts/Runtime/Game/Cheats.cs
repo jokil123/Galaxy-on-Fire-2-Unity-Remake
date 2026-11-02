@@ -29,7 +29,7 @@ namespace GoF2Remake.Data
         /// <summary>The flags an admin's /cheat can grant: the command's word and the flag's key.</summary>
         public static readonly (string word, string key)[] Flags =
         {
-            ("god", "godMode"), ("ammo", "infiniteAmmo"), ("cooldown", "noSecondaryCooldown"), ("primary", "noPrimaryCooldown"), ("boost", "noBoostCooldown"),
+            ("god", "godMode"), ("ammo", "infiniteAmmo"), ("cooldown", "noSecondaryCooldown"), ("primary", "noPrimaryCooldown"), ("equipment", "noEquipmentCooldown"),
             ("onehit", "oneHitKills"), ("locks", "instantLocks"), ("shopping", "freeShopping"), ("jumps", "freeJumps"),
         };
 
@@ -67,8 +67,11 @@ namespace GoF2Remake.Data
         public static bool NoSecondaryCooldown { get => On("noSecondaryCooldown"); set => Set("noSecondaryCooldown", value); }
         /// <summary>The primary guns fire again at once while held (no reload; the bullet pool still limits the shots in flight).</summary>
         public static bool NoPrimaryCooldown { get => On("noPrimaryCooldown"); set => Set("noPrimaryCooldown", value); }
-        /// <summary>The booster is ready again as soon as a boost ends (no recharge; a booster is still needed).</summary>
-        public static bool NoBoostCooldown { get => On("noBoostCooldown"); set => Set("noBoostCooldown", value); }
+        /// <summary>Equipment is ready again as soon as it ends (players: "no cooldown equipment, also boosters"): the booster
+        /// (no recharge, FlightModel), the cloak (no cooldown, PlayerCloak), the time extender (TimeExtender), the emergency
+        /// system (not used up: it saves again once its shield ends, PlayerHealth). The equipment is still needed; the
+        /// cloak still pays its energy cells (Free jumps waives those).</summary>
+        public static bool NoEquipmentCooldown { get => On("noEquipmentCooldown"); set => Set("noEquipmentCooldown", value); }
         public static bool OneHitKills { get => On("oneHitKills"); set => Set("oneHitKills", value); }
         public static bool InstantLocks { get => On("instantLocks"); set => Set("instantLocks", value); }
         public static bool FreeShopping { get => On("freeShopping"); set => Set("freeShopping", value); }
@@ -110,6 +113,29 @@ namespace GoF2Remake.Data
 
         /// <summary>'amount' units of any item into the hold (a secondary's amount is its ammo once mounted).</summary>
         public static void GiveItem(int item, int amount) => Shop.AddToCargo(item, amount);
+
+        /// <summary>Remake (a mission's hand-in, /take): up to 'amount' units of an item out of the hold (0 or less: all of
+        /// them), then, with 'mounted', out of the mounted equipment too (a secondary by its ammo, anything else one per
+        /// mount), like Story's step 78 takes the jump drive. The units taken; 'unmounted' when a mount changed. With none
+        /// left aboard the story's unsaleable flag goes with it (the original's flag was on that Item).</summary>
+        public static int TakeItem(int item, int amount, bool mounted, out bool unmounted)
+        {
+            unmounted = false;
+            int want = amount > 0 ? amount : int.MaxValue, taken = Mathf.Min(want, Shop.CargoOf(item));
+            Shop.RemoveFromCargo(item, taken);
+            for (int i = Session.Equipment.Count - 1; mounted && i >= 0 && taken < want; i--)
+            {
+                var e = Session.Equipment[i];
+                if (e.item != item || e.builtIn) continue;   // a mod hull's built-in items stay
+                int units = Mathf.Max(1, e.amount), take = Mathf.Min(want - taken, units);
+                if (take >= units) Session.Equipment.RemoveAt(i);
+                else e.amount -= take;
+                taken += take;
+                unmounted = true;
+            }
+            if (Shop.CargoOf(item) == 0 && !Session.Equipment.Exists(e => e.item == item)) Session.Unsaleable.Remove(item);
+            return taken;
+        }
 
         /// <summary>Docked: 'amount' of the item into the hold, then mounted like the hangar does (a one-per-ship item swaps
         /// the mounted one into the hold); the result text.</summary>

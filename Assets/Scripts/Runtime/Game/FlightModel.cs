@@ -144,7 +144,8 @@ namespace GoF2Remake.Flight
         const float LevelPitchDone = 0.01f;         // rad
 
         // ---- configuration ------------------------------------------------------------------
-        /// <summary>Options-menu steering sensitivity. Must stay well below 3.3/1.45 (~2.27). Default is a guess.</summary>
+        /// <summary>Options-menu steering sensitivity. Must stay well below 3.3/1.45 (~2.27). 1.0 is the original's fresh-install
+        /// value (the iOS build's Globals::init sets both sliders to 1.0 after the ctor's 0.5).</summary>
         public float Sensitivity = 1.0f;
         /// <summary>Tilt steering (options[0x11] = 0): PlayerEgo::down / up ramp the pitch with 1.45 / 1.25 x the tilt
         /// sensitivity; the touch stick, keys and pads use the sensitivity as it is.</summary>
@@ -463,7 +464,7 @@ namespace GoF2Remake.Flight
         void UpdateFreeBoost(float dtMs)
         {
             if (!hasBooster) { IsBoosting = false; CurrentSpeed = TopSpeed; return; }
-            if (Data.Cheats.NoBoostCooldown) boostEnergy = 1f;
+            if (Data.Cheats.NoEquipmentCooldown) boostEnergy = 1f;
             // An emptied pool doesn't restart while the key is still held (EVERSPACE 2 answers a boost on an empty pool
             // with a refusal sound): release and press again.
             if (!BoostHeld) boostSpent = false;
@@ -545,20 +546,20 @@ namespace GoF2Remake.Flight
 
         // ---- strafe (PlayerEgo::strafe 0xad838, the PC port's handler: no caller in the phone build; handleShip moves
         // the ship by it, PlayerEgo+0x37c / +0x380) -------------------------------------------------------------------
-        const float StrafeFrameMs = 1000f / 30f;
+        const float StrafeFrameMs = OriginalFrame.Ms;
         float strafeRamp = 0.1f;
         /// <summary>Sideways speed in units/ms, + = right.</summary>
         public float StrafeVelocity { get; private set; }
 
         /// <summary>Held strafe key, every frame: v = ramp * dir * min(H' * 30 * 0.002, 2) (H' = the cargo-reduced handling
-        /// on Extreme), the ramp from 0.1 x1.5 a (30 fps) frame up to 1: full sideways speed after ~6 frames.</summary>
+        /// on Extreme), the ramp from 0.1 x1.5 an original frame up to 1: full sideways speed after ~6 frames.</summary>
         public void Strafe(int dir, float dtMs)
         {
             StrafeVelocity = strafeRamp * dir * Mathf.Min(EffectiveHandling * 30f * 0.002f, 2f) * SideScale * Style.strafeScale;
             strafeRamp = Mathf.Min(strafeRamp * Mathf.Pow(1.5f, dtMs / StrafeFrameMs * Inertia), 1f);
         }
 
-        /// <summary>handleShip: while |v| &gt; 0.01 the ship moves v * dt sideways and v drops x0.7 a (30 fps) frame;
+        /// <summary>handleShip: while |v| &gt; 0.01 the ship moves v * dt sideways and v drops x0.7 an original frame;
         /// below it the ramp resets to 0.1. Returns this frame's sideways move in units.</summary>
         public float StepStrafe(float dtMs)
         {
@@ -615,8 +616,19 @@ namespace GoF2Remake.Flight
         /// <summary>Boosting or cruising: the boost's look and sound (camera rumble, the boost sound's start and stop).</summary>
         public bool LooksBoosting => IsBoosting || CruiseVisual > 0f;
 
-        public void UpdateCruise(bool cruising, float dtMs) =>
-            CruiseVisual = Mathf.MoveTowards(CruiseVisual, cruising ? 1f : 0f, Mathf.Max(0f, dtMs) / CruiseEaseMs);
+        public void UpdateCruise(bool cruising, float dtMs)
+        {
+            CruiseVisual = Mathf.MoveTowards(CruiseVisual, cruising ? 1f : 0f, Mathf.Max(0f, dtMs) / (cruising || cruiseCarryMs <= 0f ? CruiseEaseMs : cruiseCarryMs));
+            if (cruising || CruiseVisual <= 0f) cruiseCarryMs = 0f;
+        }
+
+        /// <summary>Remake: the ship comes out of a load at speed (SpaceLevel): the look starts full and eases out over 'ms'.</summary>
+        public void CarryCruiseLook(float ms)
+        {
+            CruiseVisual = 1f;
+            cruiseCarryMs = ms;
+        }
+        float cruiseCarryMs;
 
         /// <summary>The level-out request (PlayerEgo::alignToHorizon: the stick's double tap, the Level out binding). Remake:
         /// it levels LevelRequestDelayMs later unless the player steers meanwhile (UpdateLevelRequest).</summary>
@@ -777,7 +789,7 @@ namespace GoF2Remake.Flight
         public void AutopilotBank(float turnLeft, float dtMs, float frameMs)
         {
             float he = EffectiveHandling;
-            // The original's samples are per frame (a 30 fps game): taken per 33.3 ms of real time here, so the bank doesn't
+            // The original's samples are per frame (OriginalFrame.Ms): taken per that of real time here, so the bank doesn't
             // depend on the frame rate. Fast-forward runs the original's whole update with dt x 5 (autopilot_travel.md 4), so
             // each sample carries five times the turn and the ship banks hard into the turn (to the limit): per real time, not
             // per game time, keeps that (a player's report with the original's video; it was divided away).
@@ -786,9 +798,9 @@ namespace GoF2Remake.Flight
             // the ship wobbled on the autopilot (Discord report, 2026-10-18).
             autopilotSampleTurn += turnLeft;
             autopilotSampleMs += Mathf.Max(0f, frameMs);
-            if (autopilotSampleMs >= 33.333f)
+            if (autopilotSampleMs >= OriginalFrame.Ms)
             {
-                autopilotTurns[autopilotTurnIndex] = autopilotSampleTurn * 33.333f / autopilotSampleMs;
+                autopilotTurns[autopilotTurnIndex] = autopilotSampleTurn * OriginalFrame.Ms / autopilotSampleMs;
                 autopilotTurnIndex = (autopilotTurnIndex + 1) % autopilotTurns.Length;
                 autopilotTurnCount = Mathf.Min(autopilotTurnCount + 1, autopilotTurns.Length);
                 autopilotSampleTurn = autopilotSampleMs = 0f;
@@ -893,7 +905,7 @@ namespace GoF2Remake.Flight
             {
                 IsBoosting = false;
                 CurrentSpeed = TopSpeed;
-                boostTimerMs = Data.Cheats.NoBoostCooldown ? 0 : -boostRechargeMs;   // remake debug: no recharge
+                boostTimerMs = Data.Cheats.NoEquipmentCooldown ? 0 : -boostRechargeMs;   // remake debug: no recharge
             }
         }
 

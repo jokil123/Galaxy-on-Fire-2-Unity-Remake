@@ -40,6 +40,7 @@ namespace GoF2Remake.Multiplayer
             GameHooks.ActiveEventMissionTitle = () => EventMissions.Active?.title;
             GameHooks.Condition = EventRunner.Condition;
             GameHooks.ResetLocalEvents = EventRunner.ResetLocal;
+            GameHooks.StartQuest = EventRunner.StartQuest;   // a cruise drive encounter's quest graph (CruiseEncounters)
 
             GameHooks.StockShared = NetStock.Shared;
             GameHooks.StockEntered = NetStock.OnEnterStation;
@@ -56,6 +57,16 @@ namespace GoF2Remake.Multiplayer
             GameHooks.KaamoLevelChangedByHost = NetRules.HostKaamoLevelChanged;
             GameHooks.SessionFlightStyle = NetRules.TryGetFlight;
             GameHooks.EventFlightStyle = () => Events.EventFlight.Forced;   // PR #87: the Set Flight Model node, /flightstyle
+
+            // The co-op campaign (NetCoop; CoopCampaign).
+            GameHooks.CoopActive = () => NetCoop.Active;
+            GameHooks.CoopLeader = () => NetCoop.Leader;
+            GameHooks.CoopCrewSize = () => NetCoop.CrewSize;
+            GameHooks.CoopStepWon = NetCoop.ReportWon;
+            GameHooks.CoopAdvanced = NetCoop.ReportAdvanced;
+            GameHooks.CoopProgress = NetCoop.ReportProgress;
+            GameHooks.CoopPublish = NetCoop.Publish;
+            GameHooks.CoopFreelanceDone = NetCoop.ReportFreelance;
 
             InstallSpace();
         }
@@ -86,6 +97,11 @@ namespace GoF2Remake.Multiplayer
                 if (EventHost.Local) EventRunner.OnWreckHacked(LocalPilot.Instance, station, name);
                 else NetState.Instance?.WreckHackedRpc(station, name ?? "");
             };
+            SpaceHooks.PadDocked = station =>
+            {
+                if (EventHost.Local) EventRunner.OnPadDocked(LocalPilot.Instance, station);
+                else NetState.Instance?.PadDockedRpc(station);
+            };
             SpaceHooks.Notice = NetChat.Notice;
             SpaceHooks.KeysProvider = () => NetChat.Keys;
 
@@ -98,6 +114,8 @@ namespace GoF2Remake.Multiplayer
             SpaceHooks.ToggleDistress = NetDistress.Toggle;
             SpaceHooks.HelpSquadmate = client => NetDistress.Help(NetSquad.Find(client));
             SpaceHooks.DistressArrival = NetDistress.ArrivalNear;
+            SpaceHooks.FollowSquadmate = client => NetFollow.Toggle(NetSquad.Find(client));
+            SpaceHooks.FollowedSquadmate = () => NetFollow.Following;
             SpaceHooks.TeleportPose = NetTeleport.TakePose;
             SpaceHooks.ArenaProvider = () => NetArenaClient.Current;
             SpaceHooks.InArenaMatch = () => NetArenaClient.InMatch;
@@ -106,14 +124,26 @@ namespace GoF2Remake.Multiplayer
 
             SpaceHooks.EventNoDocking = () => EventRules.NoDocking;
             SpaceHooks.EventNoJumps = () => EventRules.NoJumps;
+            SpaceHooks.EventNoKhador = () => EventRules.NoKhador;
             SpaceHooks.EventCinematic = () => EventCutscene.Cinematic;
             SpaceHooks.EventInvulnerable = () => EventCutscene.Invulnerable;
             SpaceHooks.EventQuestionOpen = () => EventScreen.QuestionOpen;
             SpaceHooks.EventSceneMusic = () => EventScreen.SceneMusic;
             SpaceHooks.QuietOrbit = EventRunner.QuietOrbit;
             SpaceHooks.RequestEventOffers = EventMissions.RequestOffers;
-            SpaceHooks.RespawnDue = EventRespawn.Due;
-            SpaceHooks.Respawn = EventRespawn.Go;
+            // An event's respawn point, else a co-op guest destroyed in the leader's story orbit (beside the leader).
+            SpaceHooks.RespawnDue = ms => EventRespawn.Due(ms) || NetCoop.RespawnDue(ms);
+            SpaceHooks.Respawn = () => { if (EventRespawn.Active) EventRespawn.Go(); else NetCoop.Respawn(); };
+            SpaceHooks.CoopLevelState = NetCoop.LevelState;
+            SpaceHooks.CoopRadioShown = NetCoop.Radio;
+            SpaceHooks.CoopRoute = NetCoop.Route;
+            SpaceHooks.CoopCamera = NetCoop.Camera;
+            SpaceHooks.CoopTravel = NetCoop.Travel;
+            SpaceHooks.CoopLevelFailed = NetCoop.LevelFailed;
+            SpaceHooks.CoopDialog = NetCoop.Dialog;
+            SpaceHooks.CoopHold = NetCoop.Hold;
+            SpaceHooks.CoopLeaderHere = NetCoop.LeaderHere;
+            SpaceHooks.CoopLeaderPose = NetCoop.LeaderPose;
             SpaceHooks.ServerShutOff = DedicatedServer.ShutOff;
         }
     }

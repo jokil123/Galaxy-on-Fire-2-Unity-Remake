@@ -27,6 +27,9 @@ namespace GoF2Remake.Data
         public static Func<FreelanceMission, int, int> SplitReward;
         /// <summary>The mission failed: this player's share of a lost wager; unset: all of it.</summary>
         public static Func<FreelanceMission, int, int> MissionFailed;
+        /// <summary>Remake: starts a quest graph by name (single player; EventRunner.StartQuest: the reason it can't, null =
+        /// started; 'quiet' = one under way or done is no error): a cruise drive encounter of kind "quest" (CruiseEncounters).</summary>
+        public static Func<string, bool, string> StartQuest;
 
         // ---- event graphs (EventMissions, EventRunner) --------------------------------------------------------------
 
@@ -70,6 +73,26 @@ namespace GoF2Remake.Data
         /// <summary>The session's flight model (NetRules.TryGetFlight: FlightStyles.Original / Free, SessionRules.PlayerFlight);
         /// false = no session, the player's own option.</summary>
         public static NumberQuery SessionFlightStyle;
+
+        // ---- the co-op campaign (NetCoop; CoopCampaign) -------------------------------------------------------------
+
+        /// <summary>The session is a co-op campaign (NetState's flag); unset: no.</summary>
+        public static Func<bool> CoopActive;
+        /// <summary>This game leads the co-op campaign (the host: its story is the crew's); unset: no.</summary>
+        public static Func<bool> CoopLeader;
+        /// <summary>The crew's size (the players in the session); unset: 1.</summary>
+        public static Func<int> CoopCrewSize;
+        /// <summary>A crew member's game found the step won (CoopCampaign.ReportWon): the leader tells the crew.</summary>
+        public static Action<int> CoopStepWon;
+        /// <summary>A guest's game advanced the story by itself (a level's or a jump's own advance, not a won step): the
+        /// leader follows (from index).</summary>
+        public static Action<int> CoopAdvanced;
+        /// <summary>A guest's progress on the step (CoopCampaign.Progress as JSON) for the leader to merge.</summary>
+        public static Action<string> CoopProgress;
+        /// <summary>The leader's shared story changed (CoopCampaign.State as JSON): out to the crew.</summary>
+        public static Action<string> CoopPublish;
+        /// <summary>A crew member finished a freelance mission (its id): it counts toward step 13's three.</summary>
+        public static Action<long> CoopFreelanceDone;
 
         // ---- remake mods: customizable ships and flight styles (PR #87; ModShipKits / ModShipSounds in GoF2.Space) ----------
         /// <summary>A customizable ship's build effect (ModShipKits.BuildEffect), null = not a kit ship.</summary>

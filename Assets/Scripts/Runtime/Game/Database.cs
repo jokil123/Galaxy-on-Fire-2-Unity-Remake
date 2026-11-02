@@ -115,11 +115,13 @@ namespace GoF2Remake.Data
     /// turret's base faces, game space like position_engine (x toward the pilot's left, y up, z forward; any length), so a
     /// turret sits on the sides, the nose or at any angle; it wins over upsideDown (= [0, -1, 0]). glowColor / glowSize (remake, a mod ship's exhaust mounts):
     /// the engine flame's colour (RGB 0..1, ModShipBuilder's tinted glow and the nearest-coloured exhaust particle cell) and
-    /// shape (half width, half height, flame length in game units; none = the round glow of CustomShipData.engineGlowRadius).</remarks>
+    /// shape (half width, half height, flame length in game units; none = the round glow of CustomShipData.engineGlowRadius);
+    /// glowShape (remake, exhaust mounts) its outline in that box, Modding.EngineGlowShape: none / "round" an ellipse.</remarks>
     [System.Serializable] public class WeaponMount
     {
         public int slotType; public int[] position_engine; public float[] turretAngles; public bool upsideDown;
         public float[] glowColor, glowSize, turretUp;
+        public string glowShape;
 
         /// <summary>turretUp (else upsideDown) in the Unity ship frame ((-x, y, z), the models are mirrored): a unit vector,
         /// Vector3.up for a plain mount.</summary>
@@ -557,8 +559,10 @@ namespace GoF2Remake.Data
         /// <summary>The item and ship tables this instance holds (Session.Economy when it was loaded).</summary>
         public Economy Economy { get; private set; } = Economy.Android;
 
-        /// <summary>The macOS / Windows / iPhone tables (KiritoJPK's Default Economy items.bin / ships.bin) over the Android
-        /// ones: prices, tech levels, occurrences, attributes (and so the stats) and blueprint recipes; ship prices and slots.</summary>
+        /// <summary>The macOS / Windows / iPhone tables (KiritoJPK's Default Economy items.bin, the iOS 1.1.19 ships.bin) over the
+        /// Android ones: prices, tech levels, occurrences, attributes (and so the stats) and blueprint recipes; ship prices and
+        /// slots; and the iOS build's weapon mount sets where they differ (weapons_hd_default.json: the exhaust anchors of the
+        /// VoidX, H'Soc, Specter and Scimitar, Reference/tools/shop/build_default_mounts.py).</summary>
         void ApplyDefaultEconomy(string folder)
         {
             var file = Read<EconomyFile>(folder, "economy_default");
@@ -581,6 +585,14 @@ namespace GoF2Remake.Data
                     sh.armor = e.armor; sh.cargo = e.cargo; sh.price = e.price;
                     sh.slots = new ShipSlots { primary = e.primary, secondary = e.secondary, turret = e.turret, equipment = e.equipment };
                     sh.handling = e.handling; sh.handlingMultiplier = e.handling / 100f;
+                }
+            var mounts = Read<List<WeaponMountSet>>(folder, "weapons_hd_default");
+            if (mounts != null && WeaponMounts != null)
+                foreach (var set in mounts)
+                {
+                    if (set == null || set.mounts == null) continue;
+                    int i = WeaponMounts.FindIndex(m => m.ship == set.ship);
+                    if (i >= 0) WeaponMounts[i] = set; else WeaponMounts.Add(set);
                 }
             Economy = Economy.Default;
         }

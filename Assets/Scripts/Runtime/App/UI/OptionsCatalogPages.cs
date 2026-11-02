@@ -399,6 +399,7 @@ namespace GoF2Remake.UI
                 () => Settings.ShowStoryStep, v => Settings.ShowStoryStep = v);
             storyStep.description = () => X("showStoryStepHelp", "The current story step at the bottom right, for bug reports.");
             list.Add(storyStep);
+            AddSpeedrun(list);
             var dyingCargo = Toggle("dyingCargoMarkers", OptionPage.Gameplay, () => X("dyingCargoMarkers", "Salvage markers on dying ships"),
                 () => Settings.DyingCargoMarkers, v => Settings.DyingCargoMarkers = v);
             dyingCargo.description = () => X("dyingCargoMarkersHelp", "A dying ship with cargo shows container markers before it explodes.");
@@ -463,6 +464,7 @@ namespace GoF2Remake.UI
                 () => Settings.OriginalTargetLock ? 1 : 0, i => Settings.OriginalTargetLock = i == 1,
                 () => X("targetLockPriorityHelp", "Smart: hostile ships first, then the one nearest the crosshair. Original: the first ship in the box.") + " "
                       + X("targetLockBeams", "Beam lasers then aim only at hostiles or your lock.") + " "
+                      + X("targetLockAsteroids", "Asteroids: the one under the crosshair first.") + " "
                       + X("targetLockUnlock", "Unlock target (U) drops the lock; on touch, tap the lock plate.")));
             // Remake (players' suggestion): the Smart lock's hold on an enemy, its own option (CombatRadar, TargetLockRules).
             var keepEnemy = Toggle("keepEnemyLock", OptionPage.Gameplay, () => X("keepEnemyLock", "Keep enemy lock"),
@@ -479,6 +481,9 @@ namespace GoF2Remake.UI
                 () => Settings.AutoAdvanceDialogue, v => Settings.AutoAdvanceDialogue = v));
             list.Add(Toggle("animatedDialogue", OptionPage.Gameplay, () => X("animatedDialogue", "Animated dialogue"),
                 () => Settings.AnimatedDialogue, v => Settings.AnimatedDialogue = v));
+            // Remake: a conversation in flight doesn't pause the game (Navigation.ConversationRuns; the story level holds).
+            list.Add(Toggle("playOnInConversations", OptionPage.Gameplay, () => X("playOnInConversations", "Game runs in conversations"),
+                () => Settings.PlayOnInConversations, v => Settings.PlayOnInConversations = v));
             // The key and controller button hints everywhere: the flight HUD, the menus' prompt bars, the station, the star map,
             // Inspect ship and Action Freeze (it was "Button hints in flight", though the menus' bars read it too).
             var inputHints = Toggle("inputHints", OptionPage.Gameplay, () => X("inputHints", "Button hints"),

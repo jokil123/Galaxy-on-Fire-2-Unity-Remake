@@ -42,6 +42,7 @@ namespace GoF2Remake.UI
         bool lastTurretView, lastTurretAuto, lastShipLocked;
         VisualElement lockPlate;
         VisualElement root, safeArea, hints;
+        bool hudFading;
         VisualElement crosshair, dockPrompt, dockGlyph;
         VisualElement lockRingElement, navMarkers;   // queried once: two root.Q per frame were a fifth of the HUD's update
 
@@ -94,9 +95,9 @@ namespace GoF2Remake.UI
         float gameOverMs = -1f;
         VisualElement jumpCharge, jumpChargeFill, jumpChargeStripes, orbitInfo;
         Label jumpChargeLabel;
-        bool lastCloakCharging;
+        bool lastCloakCharging, lastDriveCharging;
         bool orbitInfoFilled;
-        bool lastAutopilot;
+        bool lastAutopilot, lastLockFastForward;
         VisualElement autopilotMenu, autopilotMenuItems;
         readonly System.Collections.Generic.List<(Button button, Navigation.Target target)> menuButtons = new System.Collections.Generic.List<(Button, Navigation.Target)>();
         int menuIndex, lastMenuMove, menuOpenedFrame;
@@ -146,6 +147,57 @@ namespace GoF2Remake.UI
             if (runtimePanel != null) Destroy(runtimePanel);
         }
 
+        /// <summary>The HUD going on across a level swap (SpaceLevel.SwapScene). A new panel's first styling and layout took 54 ms
+        /// of the swap's frame, the largest part of its stall (621 elements, measured 2026-11-01), so the old HUD stays and takes
+        /// the new level the way a new one does, in Update. Not in a session or in VR: their views hang on a level's HUD.</summary>
+        static FlightHud kept;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetKept() => kept = null;
+
+        public static void KeepForSwap()
+        {
+            kept = null;
+            if (NetSession.Active || VrFlags.Enabled) return;
+            var hud = FindAnyObjectByType<FlightHud>();
+            if (hud == null || hud.root == null) return;
+            kept = hud;
+            DontDestroyOnLoad(hud.gameObject);
+        }
+
+        /// <summary>The old level is gone, the new one's Awake is starting: its scene's HUD goes before it builds a panel, and the kept
+        /// one lets go of the old level. Real nulls: a destroyed object passes a '?.'.</summary>
+        public static void DropSceneHud()
+        {
+            if (kept == null) return;
+            foreach (var hud in FindObjectsByType<FlightHud>(FindObjectsInactive.Include))
+                if (hud != kept) DestroyImmediate(hud.gameObject);
+            kept.level = null;
+            kept.ship = null;
+            kept.weapons = null;
+            kept.mining = null;
+            kept.docking = null;
+            kept.nav = null;
+            kept.jump = null;
+            kept.health = null;
+            kept.radar = null;
+            kept.traffic = null;
+            kept.story = null;
+            kept.freelance = null;
+            kept.chase = null;
+            kept.volatileCargo = null;
+            kept.orbitInfoFilled = false;
+            kept.radioShown = -1;
+            kept.shownChatter = null;
+        }
+
+        /// <summary>Back in a scene, so that leaving this level takes the HUD with it.</summary>
+        public static void SettleKept(Scene scene)
+        {
+            if (kept != null) SceneManager.MoveGameObjectToScene(kept.gameObject, scene);
+            kept = null;
+        }
+
         /// <summary>The Mod Builder's screen in space (ModBuilder.InSpace), null otherwise.</summary>
         ModBuilderSpaceView builderSpace;
 
@@ -162,6 +214,8 @@ namespace GoF2Remake.UI
             if (jump != null) jump.Message -= OnMiningMessage;
             if (traffic != null) traffic.Message -= OnMiningMessage;
             if (traffic != null) traffic.ChoiceRequested -= OnChoiceRequested;
+            if (traffic != null) traffic.WasteSorted -= OnWasteSorted;
+            if (traffic != null) traffic.MenuRequested -= OnMenuRequested;
             if (radar != null) radar.Message -= OnRadarMessage;
             if (health != null) health.GameOverStarted -= OnGameOver;
             panelRenderer?.UnregisterUIReloadCallback(OnUIReload);
@@ -263,6 +317,8 @@ namespace GoF2Remake.UI
             pauseMenu.InfoSound = () => PlayUi(CombatAudio.Load()?.messageInfo);
             pauseMenu.HoverSound = PlayHover;   // Modified: the menus' hover / arrow sound
             pauseMenu.ButtonSound = PlayButton;
+            pauseMenu.SortingSound = PlaySortingSound;
+            pauseMenu.LotSound = PlayLotTone;
             pauseMenu.Photo = new PhotoMode(root, this) { ButtonSound = PlayButton };
             radioBox = root.Q("radio");
             screenFade = root.Q("screenFade");
@@ -519,7 +575,7 @@ namespace GoF2Remake.UI
             if (menuKeys && GameControls.AutopilotMenu.WasPressedThisFrame()) OnAutopilotButton();
             else if (menuKeys && GameControls.ActionsMenu.WasPressedThisFrame()) OnActionsButton();
             else if (menuKeys && GameControls.Wingmen.WasPressedThisFrame()) OpenMenuEntry(Navigation.Kind.Wingmen);
-            else if (menuKeys && GameControls.KhadorDrive.WasPressedThisFrame()) OpenMenuEntry(Navigation.Kind.KhadorDrive);
+            else if (menuKeys && GameControls.KhadorDrive.WasPressedThisFrame()) OpenMenuEntry(nav != null && nav.MenuEntries(true).Exists(t => t.kind == Navigation.Kind.KhadorDrive) ? Navigation.Kind.KhadorDrive : Navigation.Kind.Slipstream);
             bool freeLookNow = level != null && level.FreeLook != null && level.FreeLook.FreeLookActive;
             if (GameControls.MouseSteering.WasPressedThisFrame()
                 && !(freeLookNow && GameControls.MouseSteering.activeControl?.device is Mouse))
@@ -561,6 +617,8 @@ namespace GoF2Remake.UI
                 traffic = level.Traffic;
                 if (traffic != null) traffic.Message += OnMiningMessage;
                 if (traffic != null) traffic.ChoiceRequested += OnChoiceRequested;
+                if (traffic != null) traffic.WasteSorted += OnWasteSorted;
+                if (traffic != null) traffic.MenuRequested += OnMenuRequested;
                 if (level.Hints != null) level.Hints.HintRequested += text => OnChoiceRequested(text, null, null, null, null);
                 if (level.Hints != null) level.Hints.Message += text => OnCombatMessage(text, 1);
                 if (level.FreeLook != null) level.FreeLook.Message += OnMiningMessage;
@@ -658,19 +716,29 @@ namespace GoF2Remake.UI
             if (radar != null && !Navigation.PressesBlocked && GameControls.UnlockTarget.WasPressedThisFrame()) UnlockTarget();
             bool shipLocked = radar != null && radar.Locked != null;
             if (shipLocked != lastShipLocked) { lastShipLocked = shipLocked; BuildHints(InputMode.Current); }
+            bool lockFf = nav != null && !autopilot && nav.CanFastForward;   // remake: fast-forward to a stationary lock (its hint)
+            if (lockFf != lastLockFastForward) { lastLockFastForward = lockFf; BuildHints(InputMode.Current); }
             lockPlate.pickingMode = shipLocked && InputMode.Current == InputKind.Touch ? PickingMode.Position : PickingMode.Ignore;
-            root.EnableInClassList("hud-cinematic", (nav != null && nav.Jumping) || (jump != null && jump.Cinematic));   // jumps: no HUD
+            float hudShown = level != null ? level.HudShown : 1f;
+            root.EnableInClassList("hud-cinematic", (nav != null && nav.Jumping) || (jump != null && jump.Cinematic) || hudShown <= 0f);   // jumps: no HUD
+            if (hudShown < 1f != hudFading || hudFading) { hudFading = hudShown < 1f; safeArea.style.opacity = hudFading ? hudShown : StyleKeyword.Null; }
             // The Khador Drive's charge bar, shared with the cloak's "Cloak charging" (317, Hud::draw 0x1933f6).
             var cloak = level != null && level.Cloak != null ? level.Cloak.Rules : null;
-            bool cloakCharging = cloak != null && cloak.State == Cloak.Phase.Charging && (jump == null || !jump.Charging);
-            jumpCharge.EnableInClassList("jump-charge--shown", (jump != null && jump.Charging) || cloakCharging);
-            if (cloakCharging != lastCloakCharging)
+            bool jumpCharging = jump != null && jump.Charging;
+            bool cloakCharging = cloak != null && cloak.State == Cloak.Phase.Charging && !jumpCharging;
+            // Remake: a cruise drive's charge too (NavigationCruiseDrive), "<item> charging".
+            var drive = nav != null ? nav.Drive : null;
+            bool driveCharging = drive != null && drive.Charging && !jumpCharging && !cloakCharging;
+            jumpCharge.EnableInClassList("jump-charge--shown", jumpCharging || cloakCharging || driveCharging);
+            if (cloakCharging != lastCloakCharging || driveCharging != lastDriveCharging)
             {
                 lastCloakCharging = cloakCharging;
-                jumpChargeLabel.text = (cloakCharging ? Localization.Get(317) : Localization.Get(318)).ToUpperInvariant();
+                lastDriveCharging = driveCharging;
+                jumpChargeLabel.text = (driveCharging ? string.Format(Localization.Extra("hudCruiseDriveCharging", "{0} charging"), GoF2Remake.Data.GameNames.Item(drive.item))
+                                        : cloakCharging ? Localization.Get(317) : Localization.Get(318)).ToUpperInvariant();
             }
             // Hud::draw: half-width min(1, rate x 1.05) x 194 either side of the centre, the stripes' middle first.
-            float chargeRate = jump != null && jump.Charging ? jump.ChargeRate : cloakCharging ? cloak.ChargeRate : -1f;
+            float chargeRate = jumpCharging ? jump.ChargeRate : cloakCharging ? cloak.ChargeRate : driveCharging ? drive.ChargeRate : -1f;
             if (chargeRate >= 0f)
             {
                 float half = Mathf.Min(1f, chargeRate * 1.05f) * 194f;
@@ -800,6 +868,8 @@ namespace GoF2Remake.UI
             // ---- button sounds (TouchButton::OnTouchBegin 124 Button_Push / OnTouchEnd 123 Button_Release) -------------
 
         AudioSource uiSource;
+        /// <summary>The waste sorting page's lot tones by tier, made on first use (LotTones).</summary>
+        readonly System.Collections.Generic.Dictionary<WasteProcessing.FindTier, AudioClip> lotTones = new System.Collections.Generic.Dictionary<WasteProcessing.FindTier, AudioClip>();
 
         /// <summary>Modified: a click sounds as in the main menu: only the release, on the click (a pointer press's push is left
         /// out, but in the carrier's shop window), once per frame.</summary>

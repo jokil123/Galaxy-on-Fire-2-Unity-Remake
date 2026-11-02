@@ -157,16 +157,20 @@ namespace GoF2Remake.Multiplayer
                 run = NetAdmin.Heal, description = () => X("mpCmdHeal", "admins: repairs hull, shield and armor (yourself by default)") },
             new Command { name = "give", usage = "[players] <item> [amount] [mount]", arg = Arg.PlayerText, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
                 run = NetAdmin.Give, description = () => X("mpCmdGive", "admins: items into the hold (an item's number or name)") },
+            new Command { name = "take", usage = "[players] <item> [amount | all] [mounted]", arg = Arg.PlayerText, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
+                run = NetAdmin.Take, description = () => X("mpCmdTake", "admins: items out of the hold (all by default; mounted: the mounted ones too)") },
             new Command { name = "credits", usage = "[players] <amount>", arg = Arg.PlayerText, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
                 run = NetAdmin.Credits, description = () => X("mpCmdCredits", "admins: gives credits (negative: takes them)") },
             new Command { name = "standing", usage = "[players] <race> <amount> [set]", arg = Arg.PlayerText, self = true, available = () => LocalIsAdmin,
                 allowed = IsAdmin, run = NetAdmin.StandingCommand,
                 description = () => X("mpCmdStanding", "admins: moves the standing toward a race, a mod's too (set: to the amount)") },
-            new Command { name = "spawn", usage = "[players] <ship | object | wreck> [race] [count] [enemy | friendly | neutral | standing] [turrets <item,item>] [named <name>] [at x y z]", arg = Arg.PlayerText, self = true,
+            new Command { name = "spawn", usage = "[players] <ship | object | wreck | type <npc type>> [race] [count] [enemy | friendly | neutral | standing] [turrets <item,item>] [hull <x>] [guns <x>] [named <name>] [at x y z]", arg = Arg.PlayerText, self = true,
                 available = () => LocalIsAdmin, allowed = IsAdmin, run = NetAdmin.Spawn,
-                description = () => X("mpCmdSpawn", "admins: NPC ships or an object, ahead or at x y z (enemy by default; named: a HUD name)") },
+                description = () => X("mpCmdSpawn", "admins: NPC ships or an object, ahead or at x y z (enemy by default; named: a HUD name; hull / guns: scaled; type: an NPC ship type)") },
             new Command { name = "ship", usage = "[players] <ship | own>", arg = Arg.PlayerText, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
                 run = NetAdmin.Ship, description = () => X("mpCmdShip", "admins: flies any ship of the debug Ships tab (its number or name; own = back)") },
+            new Command { name = "lend", usage = "[players] <ship [keep] | back>", arg = Arg.PlayerText, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
+                run = NetAdmin.Lend, description = () => X("mpCmdLend", "admins: a loaner, the own ship parked (keep: its items move over; back = the own ship again)") },
             new Command { name = "ammo", usage = "[players]", arg = Arg.Player, optional = true, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
                 run = (a, by) => NetAdmin.Simple(a, by, NetAdmin.Order.Ammo), description = () => X("mpCmdAmmo", "admins: every mounted secondary to 50") },
             new Command { name = "reveal", usage = "[players]", arg = Arg.Player, optional = true, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
@@ -175,7 +179,7 @@ namespace GoF2Remake.Multiplayer
                 run = NetAdmin.SystemShow, description = () => X("mpCmdSystem", "admins: shows or hides a system on their star map until reset") },
             new Command { name = "peace", usage = "[players]", arg = Arg.Player, optional = true, self = true, available = () => LocalIsAdmin, allowed = IsAdmin,
                 run = (a, by) => NetAdmin.Simple(a, by, NetAdmin.Order.Peace), description = () => X("mpCmdPeace", "admins: neutral standings, no station grudges") },
-            new Command { name = "cheat", usage = "[players] <god | ammo | cooldown | primary | boost | onehit | locks | shopping | jumps> [on | off]", arg = Arg.PlayerText,
+            new Command { name = "cheat", usage = "[players] <god | ammo | cooldown | primary | equipment | onehit | locks | shopping | jumps> [on | off]", arg = Arg.PlayerText,
                 self = true, available = () => LocalIsAdmin, allowed = IsAdmin, run = NetAdmin.Cheat,
                 description = () => X("mpCmdCheat", "admins: a debug toggle for a player, this session only (toggled without on / off)") },
             new Command { name = "title", usage = "[players] <text> [| subtitle] [for <seconds>]", arg = Arg.PlayerText, self = true,
@@ -195,9 +199,9 @@ namespace GoF2Remake.Multiplayer
             new Command { name = "respawn", usage = "[players] <station [x y z] [spread <units>] [delay <seconds>] | off>", arg = Arg.PlayerText, self = true,
                 available = () => LocalIsAdmin, allowed = IsAdmin, run = NetAdmin.Respawn,
                 description = () => X("mpCmdRespawn", "admins: where destroyed ships come back in space (not docked), until off") },
-            new Command { name = "restrict", usage = "[players] <jumps | docking | all | off>", arg = Arg.PlayerText, self = true,
+            new Command { name = "restrict", usage = "[players] <jumps | docking | all | khador | off>", arg = Arg.PlayerText, self = true,
                 available = () => LocalIsAdmin, allowed = IsAdmin, run = NetAdmin.Restrict,
-                description = () => X("mpCmdRestrict", "admins: no jumps (planet, gate, Khador) and / or no docking, until off") },
+                description = () => X("mpCmdRestrict", "admins: no jumps (planet, gate, Khador) and / or no docking (khador: only the Khador Drive), until off") },
             new Command { name = "flightstyle", usage = "[players] <es2 | gof2 | player>", arg = Arg.PlayerText, self = true,
                 available = () => LocalIsAdmin, allowed = IsAdmin, run = NetAdmin.FlightStyle,
                 description = () => X("mpCmdFlightStyle", "admins: some players' flight model (es2 / gof2) for now; player gives it back") },
@@ -274,6 +278,9 @@ namespace GoF2Remake.Multiplayer
                 run = (a, by) => Moderate("disband", a, by), description = () => X("mpCmdDisband", "admins: ends a faction") },
             new Command { name = "deleteprofile", usage = "<profile>", arg = Arg.Text, available = () => LocalRole >= NetModeration.Master, allowed = Anyone,
                 run = (a, by) => Moderate("deleteprofile", a, by), description = () => X("mpCmdDeleteProfile", "master: deletes an offline pilot's profile") },
+            new Command { name = "coop", usage = "[strength 0|25|50|100|150|200] [rewards shared|full]", arg = Arg.Text,
+                available = () => NetCoop.Active && LocalIsAdmin, allowed = IsAdmin, run = NetCoop.Command,
+                description = () => X("mpCmdCoop", "the host: the co-op campaign's enemy strength and story credits") },
             new Command { name = "flightmodel", usage = "[gof2 | es2 | player]", arg = Arg.Text, available = () => LocalIsAdmin, allowed = IsAdmin,
                 run = FlightModel,
                 description = () => X("mpCmdFlightModel", "admins: the flight model for everyone: gof2, es2 or player (each player's own)") },
@@ -324,6 +331,8 @@ namespace GoF2Remake.Multiplayer
                 description = () => X("mpCmdSos", "in space: calls your squad for help, or ends the call") },
             new Command { name = "assist", usage = "<player>", arg = Arg.Player, available = Everyone, local = Assist,
                 description = () => X("mpCmdAssist", "flies to a squadmate calling for help") },
+            new Command { name = "follow", usage = "[<player>]", arg = Arg.Player, optional = true, available = Everyone, local = Follow,
+                description = () => X("mpCmdFollow", "goes after a squadmate whenever they jump to another orbit or system; no name: stops") },
             new Command { name = "squad", usage = "[invite <player> | accept | decline | leave]", arg = Arg.Text, optional = true, available = Everyone,
                 local = Squad, description = () => X("mpCmdSquad", "your squad; invite a pilot docked at your station, answer an invitation, leave") },
             // Trades between players (NetTradeClient / NetTrade): asked and answered by this game, the server checks them.
@@ -535,6 +544,17 @@ namespace GoF2Remake.Multiplayer
             var caller = MatchPlayer(who, out _) as NetPlayer;
             NetChat.Notice(caller != null && NetSquad.Same(caller, NetPlayer.Local) ? NetDistress.Help(caller) ?? ""
                 : string.Format(X("mpHelpNoMate", "No squadmate called \"{0}\"."), who));
+        }
+
+        /// <summary>/follow: follow a squadmate from orbit to orbit, or (no name, or the one followed) stop (NetFollow).</summary>
+        static void Follow(string who)
+        {
+            who = (who ?? "").Trim();
+            if (who.Length == 0) { NetChat.Notice(NetFollow.Stop() ?? X("mpFollowNobody", "You aren't following anyone. /follow <squadmate> follows one.")); return; }
+            var mate = MatchPlayer(who, out _) as NetPlayer;
+            if (mate == null || mate == NetPlayer.Local || !NetSquad.Same(mate, NetPlayer.Local))
+                NetChat.Notice(string.Format(X("mpHelpNoMate", "No squadmate called \"{0}\"."), who));
+            else NetChat.Notice(NetFollow.Toggle(mate) ?? "");
         }
 
         static string X(string key, string english) => Localization.Extra(key, english);

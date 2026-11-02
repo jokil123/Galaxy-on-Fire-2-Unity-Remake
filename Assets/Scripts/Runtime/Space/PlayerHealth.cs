@@ -165,7 +165,8 @@ namespace GoF2Remake.Flight
         bool TryEmergency()
         {
             if (!hasEmergency || emergencyMs > 0f || Dead) return false;
-            hasEmergency = false;
+            bool keep = Cheats.NoEquipmentCooldown;   // remake debug: not used up, it saves again once its shield ends
+            hasEmergency = keep;
             Hp.hull = 1;
             Target.hp = 1;
             emergencyMs = emergencyLength;
@@ -173,7 +174,7 @@ namespace GoF2Remake.Flight
             // used up for good (the one mounted: a mod's emergency system based on 185 too, which a check of 185 kept for ever)
             int used = emergencyItem;
             int at = Session.Equipment.FindIndex(e => e.item == used);
-            if (at >= 0) Session.Equipment.RemoveAt(at);
+            if (at >= 0 && !keep) Session.Equipment.RemoveAt(at);
             // 1115 Invincibile is a loop: PlayerEgo::update stops it when the shield ends.
             if (assets != null && assets.invincibility != null)
             {
@@ -400,9 +401,13 @@ namespace GoF2Remake.Flight
             if (!Hp.Alive) StartDeath();
         }
 
+        /// <summary>Remake: the ship took damage (a cruise drive's interruption, Navigation).</summary>
+        public event Action Hit;
+
         /// <summary>PlayerEgo::update hit feedback.</summary>
         void OnHit()
         {
+            Hit?.Invoke();
             GetComponent<VolatileCargo>()?.Add(0.065f);   // Player::damage: the volatile meter + 0.065 per hit
             if (chase != null && chase.enabled) chase.Shake(1000f, 6f);
             if (Hp.shield >= 2f) ShieldHitMs = 500f;
@@ -466,8 +471,8 @@ namespace GoF2Remake.Flight
             if (!exploded)
             {
                 transform.position += transform.forward * ship.ExternalSpeedMetersPerSecond * dtMs / 1000f;
-                // PlayerEgo::update 0xab2aa: the model's Euler angles + 0.03 rad per (30 fps) frame on every axis.
-                float step = 0.03f * Mathf.Rad2Deg * (dtMs / (1000f / 30f));
+                // PlayerEgo::update 0xab2aa: the model's Euler angles + 0.03 rad per original frame on every axis.
+                float step = 0.03f * Mathf.Rad2Deg * (dtMs / OriginalFrame.Ms);
                 if (ship.visualModel != null) ship.visualModel.localRotation *= Quaternion.Euler(step, step, step);
             }
             if (!exploded && deathMs >= 3000f)

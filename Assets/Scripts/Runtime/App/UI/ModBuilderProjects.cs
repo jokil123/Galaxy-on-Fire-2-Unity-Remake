@@ -62,6 +62,7 @@ namespace GoF2Remake.UI
             ("mbSystems", "Systems", "New star systems and their routes, placed on the star map.", ModBuilder.Kind.Systems),
             ("mbModRaces", "Races", "Races of your own beside the Terrans, Vossk, Nivelians and Midorians: who owns systems, flies ships and raids, and who fights whom. On the star map.", ModBuilder.Kind.Races),
             ("mbStations", "Stations", "New stations and changes to the game's: models, rooms, planets. In their own orbit.", ModBuilder.Kind.Stations),
+            ("mbNpcShips", "NPC ships", "Capital ships, freighters and bosses nobody flies, new or the game's changed: turrets, escorts, loot, where they come, a dock with a shop. In space.", ModBuilder.Kind.NpcShips),
             ("mbInteriors", "Hangars & bars", "Hangar and Space Lounge rooms of your own, with their markers. In the room itself.", ModBuilder.Kind.Interiors),
             ("mbCampaigns", "Campaign", "A new game of your own: start, galaxy, ships; new-game options.", ModBuilder.Kind.Campaigns),
         };
@@ -341,10 +342,10 @@ namespace GoF2Remake.UI
             p.AudioFiles(ModProject.MusicFolder).Count + p.AudioFiles(ModProject.SoundsFolder).Count + p.AudioFiles(ModProject.VoicesFolder).Count
             + p.AudioFiles(ModProject.VoicesFolder + "/de").Count + p.AudioFiles(ModProject.VoicesFolder + "/en").Count;
 
-        /// <summary>The weapons with a look of their own (items.json "fx").</summary>
-        static int FxCount(ModProject p) => p.Items.Count(i => i.Get("fx") != null);
+        /// <summary>The weapons with a look of their own (items.json "fx") and the weapon effects (weaponfx.json).</summary>
+        static int FxCount(ModProject p) => p.Items.Count(i => i.Get("fx") != null) + p.WeaponEffects.Count;
 
-        static bool HasContent(ModProject p) => p.Ships.Count + p.Items.Count + p.Characters.Count + p.SkinShips().Count + p.Blueprints.Count + p.Quests.Count
+        static bool HasContent(ModProject p) => p.Ships.Count + p.Items.Count + p.WeaponEffects.Count + p.Characters.Count + p.SkinShips().Count + p.Blueprints.Count + p.Quests.Count
                                                + p.Systems.Count + p.Stations.Count + p.Interiors.Count + p.GameOptions.Count + AudioCount(p) > 0 || p.Campaign != null
                                                || p.EventGraphs().Count > 0;
 
@@ -385,7 +386,7 @@ namespace GoF2Remake.UI
                 {
                     ModBuilder.Kind.Ships => Count(selected.Ships.Count, "mbOneShip", "1 ship", "mbShipsN", "{0} ships"),
                     ModBuilder.Kind.Items => Count(selected.Items.Count, "mbOneItem", "1 item", "mbItemsN", "{0} items"),
-                    ModBuilder.Kind.WeaponFx => Count(FxCount(selected), "mbOneFx", "1 weapon", "mbFxN", "{0} weapons"),
+                    ModBuilder.Kind.WeaponFx => Count(FxCount(selected), "mbOneFx", "1 look", "mbFxN", "{0} looks"),
                     ModBuilder.Kind.Characters => Count(selected.Characters.Count, "mbOneCharacter", "1 character", "mbCharactersN", "{0} characters"),
                     ModBuilder.Kind.Skins => Count(selected.SkinShips().Count, "mbOneSkin", "1 skin", "mbSkinsN", "{0} skins"),
                     ModBuilder.Kind.Blueprints => Count(selected.Blueprints.Count, "mbOneBlueprint", "1 blueprint", "mbBlueprintsN", "{0} blueprints"),
@@ -395,6 +396,7 @@ namespace GoF2Remake.UI
                     ModBuilder.Kind.Systems => Count(selected.Systems.Count, "mbOneSystem", "1 system", "mbSystemsN", "{0} systems"),
                     ModBuilder.Kind.Races => Count(selected.Races.Count, "mbOneModRace", "1 race", "mbModRacesN", "{0} races"),
                     ModBuilder.Kind.Stations => Count(selected.Stations.Count, "mbOneStation", "1 station", "mbStationsN", "{0} stations"),
+                    ModBuilder.Kind.NpcShips => Count(selected.NpcShips.Count, "mbOneNpcShip", "1 NPC ship", "mbNpcShipsN", "{0} NPC ships"),
                     ModBuilder.Kind.Interiors => Count(selected.Interiors.Count, "mbOneRoom", "1 room", "mbRoomsN", "{0} rooms"),
                     ModBuilder.Kind.Campaigns => selected.Campaign != null ? T("mbYes", "yes") + (selected.GameOptions.Count > 0 ? " · " + Count(selected.GameOptions.Count, "mbOneOption", "1 option", "mbOptionsN", "{0} options") : "")
                                                : selected.GameOptions.Count > 0 ? Count(selected.GameOptions.Count, "mbOneOption", "1 option", "mbOptionsN", "{0} options") : T("mbNone", "none"),

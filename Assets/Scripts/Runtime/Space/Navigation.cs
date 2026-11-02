@@ -17,7 +17,8 @@
 //   MGame+0x160 fast-forward      held button: the whole game runs 5x (Time.timeScale) while the autopilot or an asteroid
 //                                 approach runs and the target is >= 20000 units away; releasing, arriving or the
 //                                 autopilot ending stops it, and hostile ships around block it (Radar+0x54); remake,
-//                                 multiplayer: a cruise mode instead, only the player's ship 5x as fast (Cruise)
+//                                 multiplayer: a cruise mode instead, only the player's ship 5x as fast (Cruise);
+//                                 remake: also by hand toward a stationary locked object (LockFastForward)
 //   Hud::initHudMenu(3) 0x18e080  the autopilot menu (autopilot button while the autopilot is off; the game pauses):
 //                                 549 "Asteroid field" (not in the alien orbit; flies to the field centre and, like the
 //                                 original, keeps going until switched off), "<name> Station" (not in empty orbits),
@@ -47,25 +48,28 @@ using UnityEngine.SceneManagement;
 namespace GoF2Remake.Flight
 {
     [Unity.Scripting.LifecycleManagement.NoAutoStaticsCleanup]
-    public class Navigation : MonoBehaviour
+    public partial class Navigation : MonoBehaviour
     {
-        public enum Kind { Station, Jumpgate, Planet, AsteroidField, Destination, KhadorDrive, Waypoint, Wingmen, Cloak, Wormhole, DockingTarget, Secondary, TimeExtender,
+        public enum Kind { Station, Jumpgate, Planet, AsteroidField, Destination, KhadorDrive, Slipstream, System, Waypoint, Wingmen, Cloak, Wormhole, DockingTarget, Secondary, TimeExtender,
                            Distress, Assist,
             /// <summary>Remake multiplayer: a named object (/spawn ... named, DebugSpawner.SpawnObject): its name and distance
             /// near the crosshair like a landmark's, never locked or flown to.</summary>
-            Marker }
+            Marker,
+            /// <summary>Remake multiplayer: follow a squadmate from orbit to orbit, or stop (NetFollow).</summary>
+            Follow }
 
         public class Target
         {
             public Kind kind;
             public Transform transform;      // null for fixed positions
             public Vector3 fixedPosition;
-            public int station = -1;         // planets: the station it leads to
+            public int station = -1;         // planets: the station it leads to (interstellar systems: their arrival)
+            public int system = -1;          // interstellar systems: the system
             public bool disabled;            // drawn half-transparent, ignores taps (the cloak while not ready)
             public bool hidden;              // not drawn and not lockable now (the wormhole while invisible)
             public string name;
             public NpcShip dockingShip;     // docking targets: the object
-            public ulong client;             // multiplayer Assist: the squadmate calling for help
+            public ulong client;             // multiplayer Assist / Follow: the squadmate calling for help / to follow
             public bool freelance;          // waypoints: a freelance mission's route (the white freelance icon, not the gold story one)
             public bool eventWaypoint;      // waypoints: the event's own one (SetEventWaypoint), beside the player route
             public int techLevel = -1;      // stations: the tech level its marker shows (-1 = the orbit's station's)
@@ -93,6 +97,14 @@ namespace GoF2Remake.Flight
         /// <summary>The flight HUD's pause menu is open (MenuTouchWindow mode 1): the game is paused.</summary>
         public bool PauseMenuOpen { get => pauseMenuOpen; set { pauseMenuOpen = value; ApplyTimeScale(); } }
         bool pauseMenuOpen;
+        /// <summary>A story or freelance conversation is open (StorySpace, FreelanceOrbit): paused as in the original, unless
+        /// Options > Gameplay "Game runs in conversations" (Settings.PlayOnInConversations) keeps the world going (ConversationRuns).</summary>
+        public bool Conversation { get => conversation; set { conversation = value; ApplyTimeScale(); } }
+        bool conversation;
+        /// <summary>Remake: a conversation is open and single player runs on (Settings.PlayOnInConversations): the controls stop
+        /// as in multiplayer (InputHalted), the player can't be hurt, the NPCs hold fire and the story level holds
+        /// (CampaignLevel.Held).</summary>
+        public static bool ConversationRuns { get; private set; }
         /// <summary>The autopilot to the jumpgate is inside its sphere (Level::collideStream, radius 7500 / Vossk 11250).</summary>
         public bool ReachedGate => AutopilotTarget?.kind == Kind.Jumpgate && (AutopilotTarget.Position - ship.transform.position).magnitude < gateRadiusUnits * M;
         /// <summary>Wingmen fly with the player: the menu offers 306 "Wingmen" (the HUD's action-menu entry in the original).</summary>
@@ -241,6 +253,9 @@ namespace GoF2Remake.Flight
 
         /// <summary>Set by the level: planet jumps and the Khador Drive are refused (story, campaign_flow.md 7).</summary>
         public Func<bool> JumpsBlocked;
+        /// <summary>Set by the level (remake): the Khador Drive and the slipstream alone are refused (an event's Restrict Travel
+        /// "khador"), the planet jumps and the gate still open.</summary>
+        public Func<bool> KhadorBlocked;
         /// <summary>Set by the level: the HUD text for a jump JumpsBlocked refuses, null = 525 "Not possible on a mission."
         /// (42 in the Void: the way out is the wormhole, Story.EscapesByWormhole).</summary>
         public Func<string> JumpRefusalText;
@@ -269,9 +284,10 @@ namespace GoF2Remake.Flight
         /// autopilot, the asteroid approach, an object's approach); its turns, timers and the camera keep their pace.</summary>
         public bool Cruise { get; private set; }
         /// <summary>The player ship's forward speed factor (ShipController, Mining's approach): from 1 up to FastForwardScale
-        /// while cruising, eased in over CruiseRampUpMs (smoothstep) and back over CruiseRampDownMs.</summary>
+        /// while cruising, eased in over CruiseRampUpMs (smoothstep) and back over CruiseRampDownMs; or the mounted cruise
+        /// drive's factor (CruiseDrive.Factor, its own ramp) while that runs (NavigationCruiseDrive).</summary>
         public static float CruiseFactor { get; private set; } = 1f;
-        /// <summary>The cruise is held and allowed now (its boost look, FlightModel.CruiseVisual, follows this).</summary>
+        /// <summary>The cruise is held and allowed now, or the cruise drive runs (its boost look, FlightModel.CruiseVisual, follows this).</summary>
         public static bool Cruising { get; private set; }
         const float CruiseRampUpMs = 3000f, CruiseRampDownMs = 1200f;
         float cruiseLevel;
@@ -288,6 +304,8 @@ namespace GoF2Remake.Flight
         public bool LandmarkLocked => Locked != null && Locked.kind != Kind.Planet && Locked.kind != Kind.Waypoint;
         /// <summary>CombatRadar has a ship / crate candidate this frame or a crate on the tractor beam.</summary>
         [NonSerialized] public bool ShipLockActive;
+        /// <summary>CombatRadar's ship lock this frame, null = none (StillLockUnits).</summary>
+        [NonSerialized] public Transform ShipLocked;
         /// <summary>Radar+0x54: hostile ships around (Traffic): no fast-forward.</summary>
         [NonSerialized] public bool HostilesPresent;
         public bool AboutToReach { get; private set; }
@@ -332,6 +350,8 @@ namespace GoF2Remake.Flight
             sfx.playOnAwake = false;
             var scanner = Shop.FirstMounted(database, 17);
             LockTimeMs = Cheats.LockMs(scanner != null && scanner.HasAttr(29) ? scanner.Attr(29) : 8000);
+            SetupDrive(database);   // remake: a mounted cruise drive (NavigationCruiseDrive)
+            SetupInterstellar();   // remake: the suns of the space between the systems (NavigationInterstellar)
             gateRadiusUnits = layout.JumpgateRadius;
 
             // Level::getLandmarks: [0] station (none in empty orbits), [1] the visible jumpgate (gate orbit only).
@@ -376,6 +396,7 @@ namespace GoF2Remake.Flight
         {
             var list = new List<Target>();
             if (actions) return ActionEntries(list);
+            if (Interstellar) return SystemEntries(list);
             if (!layout.alienOrbit)
             {
                 if (AsteroidField != null) list.Add(AsteroidField);
@@ -407,7 +428,8 @@ namespace GoF2Remake.Flight
             if (HasWingmen != null && HasWingmen()) list.Add(new Target { kind = Kind.Wingmen, name = Localization.Get(306) });
             if (Cloak != null) list.Add(new Target { kind = Kind.Cloak, name = Cloak.ItemName, disabled = !Cloak.Rules.Available });
             // Remake: not while docked at an object (it holds the ship: undock first).
-            if (GalaxyMap.HasJumpDrive(db) && (Docking == null || Docking.State == ObjectDocking.Phase.Idle || Docking.State == ObjectDocking.Phase.Approach)) list.Add(new Target { kind = Kind.KhadorDrive, name = Localization.Get(1359) });
+            if (!Interstellar && GalaxyMap.HasJumpDrive(db) && (Docking == null || Docking.State == ObjectDocking.Phase.Idle || Docking.State == ObjectDocking.Phase.Approach)) list.Add(new Target { kind = Kind.KhadorDrive, name = Localization.Get(1359) });
+            AddSlipstreamEntry(list);   // remake: the mounted drive that flies between the systems (NavigationInterstellar)
             // Remake: the time extender too (the original has it only on its own touch slot), so one menu holds every
             // device: secondaries, wingmen, cloak, Khador Drive and the time extender (half-transparent while recharging).
             if (Extender != null)
@@ -424,6 +446,13 @@ namespace GoF2Remake.Flight
                     if (m != null && !m.IsOwner && m.Distress)
                         list.Add(new Target { kind = Kind.Assist, client = m.OwnerClientId,
                                               name = string.Format(Localization.Extra("mpHelpEntry", "Help {0}"), m.DisplayName) });
+                // Follow each squadmate from orbit to orbit (NetFollow), or stop following the one followed.
+                ulong followed = GoF2Remake.World.SpaceHooks.FollowedSquadmate?.Invoke() ?? ulong.MaxValue;
+                foreach (var m in GoF2Remake.World.SpaceHooks.Squad)
+                    if (m != null && !m.IsOwner)
+                        list.Add(new Target { kind = Kind.Follow, client = m.OwnerClientId,
+                                              name = string.Format(m.OwnerClientId == followed ? Localization.Extra("mpUnfollowEntry", "Stop following {0}")
+                                                                                              : Localization.Extra("mpFollowEntry", "Follow {0}"), m.DisplayName) });
             }
             return list;
         }
@@ -475,6 +504,12 @@ namespace GoF2Remake.Flight
                 if (!string.IsNullOrEmpty(msg)) Say(msg);
                 return;
             }
+            if (target.kind == Kind.Follow)
+            {
+                string msg = GoF2Remake.World.SpaceHooks.FollowSquadmate?.Invoke(target.client);
+                if (!string.IsNullOrEmpty(msg)) Say(msg);
+                return;
+            }
             if (target.kind == Kind.TimeExtender) { Extender?.Toggle(); return; }   // the game runs again: CloseMenu above
             if (target.kind == Kind.DockingTarget) { Docking?.Dock(target.dockingShip); return; }
             if (target.kind == Kind.Waypoint)
@@ -490,11 +525,13 @@ namespace GoF2Remake.Flight
             }
             if (target.kind == Kind.KhadorDrive)
             {
-                if (JumpsBlocked != null && JumpsBlocked() && Story.ForcedKhadorTarget(Session.StationIndex) == null) { Say(JumpRefusal); return; }
+                if (((JumpsBlocked != null && JumpsBlocked()) || (KhadorBlocked != null && KhadorBlocked())) && Story.ForcedKhadorTarget(Session.StationIndex) == null) { Say(JumpRefusal); return; }
                 if (GalaxyMap.HasVolatileGoods) { Say(Localization.Get(612)); return; }   // MGame::UseKhadorDrive: ChoiceWindow 612
                 KhadorRequested?.Invoke();
                 return;
             }
+            if (target.kind == Kind.Slipstream) { RequestInterstellar(); return; }
+            if (target == VoidDive) StartVoidDive();
             Say($"{Localization.Get(546)}: {target.name}", HudMessageKind.Target);
             Play(sounds?.autopilotOn);
             SetAutopilot(target);
@@ -505,18 +542,48 @@ namespace GoF2Remake.Flight
 
         /// <summary>MGame::OnTouchBegin key 0x100: allowed while the autopilot, an asteroid approach or the approach to an
         /// object's docking point runs (PlayerEgo::isDockingToDockingPoint; the remake left that one out, a player's report at
-        /// 135's mining plant), not within 20000 units of the target, and no hostile ships.</summary>
+        /// 135's mining plant), not within 20000 units of the target, and no hostile ships. Remake: in manual flight too with
+        /// a stationary object locked (LockFastForward).</summary>
         public bool CanFastForward
         {
             get
             {
-                if (Jumping || HostilesPresent || TimeExtender.Active) return false;
+                if (Interstellar || Jumping || HostilesPresent || TimeExtender.Active) return false;   // (the drive has the button there)
                 if (Autopilot) return !AboutToReach;
                 if (mining != null && mining.Target != null && mining.State == Mining.Phase.Approaching)
                     return (mining.Target.transform.position - ship.transform.position).magnitude / M >= AboutToReachUnits;
                 if (Docking != null && Docking.ApproachDistanceUnits >= AboutToReachUnits) return true;
-                return false;
+                return LockFastForward;
             }
+        }
+
+        /// <summary>Remake (the user's): fast-forward (multiplayer: the cruise) in manual flight toward a stationary locked
+        /// object at least AboutToReachUnits away (StillLockUnits). Not with a cruise drive fitted (the button is the
+        /// drive's there, NavigationCruiseDrive), nor while mining, docking or flying a planet run.</summary>
+        public bool LockFastForward =>
+            Drive == null && stillLockUnits >= AboutToReachUnits && !ArrivalHeld && RunPlanet == null
+            && (mining == null || mining.State == Mining.Phase.Idle) && (Docking == null || !Docking.Busy);
+
+        readonly StillLock stillLock = new StillLock();
+        float stillLockUnits = -1f;
+
+        /// <summary>Game units to the stationary locked object, -1 = none: the station, the jumpgate or a waypoint (fixed
+        /// points), else a docking target, the locked asteroid or the locked ship once it holds still (StillLock). Not a
+        /// planet: the backdrop's, never reached by flying (its lock jumps), nor a mobile station on its way.</summary>
+        float StillLockUnits(float dtMs)
+        {
+            Transform moving = null;
+            var l = Locked;
+            if (l != null && l.kind != Kind.Planet)
+            {
+                if (l.transform == null) { stillLock.Clear(); return (l.Position - ship.transform.position).magnitude / M; }
+                moving = l.transform;
+            }
+            else if (mining != null && mining.Locked != null) moving = mining.Locked.transform;
+            else if (ShipLocked != null) moving = ShipLocked;
+            if (moving == null) { stillLock.Clear(); return -1f; }
+            var p = moving.position;
+            return stillLock.Update(moving, p / M, dtMs) ? (p - ship.transform.position).magnitude / M : -1f;
         }
 
         // ---- per frame -----------------------------------------------------------------------------------------
@@ -525,6 +592,7 @@ namespace GoF2Remake.Flight
         {
             if (ship == null) return;
             float dtMs = Time.deltaTime * 1000f;
+            UpdateDrive(dtMs);
             UpdateCruise(dtMs);
             // PlayerEgo::update: whatever set the player route (a campaign level, a freelance mission's waypoints, a
             // Challenge's course, step 59's convoy point), Route::update advances it from the ship's position every frame;
@@ -538,9 +606,12 @@ namespace GoF2Remake.Flight
             }
             if (Jumping) { UpdateJump(dtMs); return; }
             if (paused || pauseMenuOpen) return;
-            if (Autopilot) AboutToReach = (AutopilotTarget.Position - ship.transform.position).magnitude / M < AboutToReachUnits;
+            if (Autopilot) AboutToReach = RunPlanet == null && (AutopilotTarget.Position - ship.transform.position).magnitude / M < AboutToReachUnits;
             if (MenuOpen) return;   // paused
             UpdateLock(dtMs);
+            stillLockUnits = StillLockUnits(dtMs);
+            UpdateInterstellar();
+            UpdatePlanetRun();
             SetFastForward(fastForwardHeld && CanFastForward);
         }
 
@@ -635,7 +706,7 @@ namespace GoF2Remake.Flight
             if (Locked != null && !wasLocked && !RadarOff) Play(sounds?.targetLock);
             wasLocked = Locked != null;
             // The autopilot flying to a programmed station's planet jumps as soon as that planet is locked.
-            if (Locked != null && Locked == AutopilotTarget && Locked.kind == Kind.Planet)
+            if (Locked != null && Locked == AutopilotTarget && Locked.kind == Kind.Planet && Locked != RunPlanet)
             {
                 if (PlanetJumpRefused != null && PlanetJumpRefused(Locked.station)) { SetAutopilot(null); return; }
                 if (JumpsBlocked != null && JumpsBlocked()) { Refuse(JumpRefusal); return; }   // Radar::draw: 525 instead of the jump
@@ -695,9 +766,13 @@ namespace GoF2Remake.Flight
             return true;
         }
 
+        /// <summary>Remake: an arrival's warp is easing out: it runs its course, no drive and no autopilot till then.</summary>
+        public bool ArrivalHeld { get; set; }
+
         /// <summary>PlayerEgo::setAutoPilot: throttle to 100 % when turning on; turning off clears the locks.</summary>
         public void SetAutopilot(Target target)
         {
+            if (ArrivalHeld && target != null) return;
             AutopilotTarget = target;
             ship.autopilotTarget = target != null ? () => target.Position : null;
             if (target != null) ship.SetThrottle(1f);
@@ -709,6 +784,11 @@ namespace GoF2Remake.Flight
         // ---- planet jump (PlayerEgo::dockToPlanet 0xadd20) ----------------------------------------------------
 
         void StartJump(Target planet)
+        {
+            if (!StartPlanetRun(planet)) JumpToPlanet(planet);
+        }
+
+        void JumpToPlanet(Target planet)
         {
             SetAutopilot(null);
             jumpTarget = planet;
@@ -745,9 +825,11 @@ namespace GoF2Remake.Flight
 
         void UpdateCruise(float dtMs)
         {
-            Cruising = Cruise && !halted && !Jumping;
-            cruiseLevel = Mathf.MoveTowards(cruiseLevel, Cruising ? 1f : 0f, Mathf.Max(0f, dtMs) / (Cruising ? CruiseRampUpMs : CruiseRampDownMs));
-            CruiseFactor = 1f + (FastForwardScale - 1f) * cruiseLevel * cruiseLevel * (3f - 2f * cruiseLevel);
+            bool cruise = Cruise && !halted && !Jumping;
+            Cruising = cruise || DriveCruising;
+            cruiseLevel = Mathf.MoveTowards(cruiseLevel, cruise ? 1f : 0f, Mathf.Max(0f, dtMs) / (cruise ? CruiseRampUpMs : CruiseRampDownMs));
+            float multiplayer = 1f + (FastForwardScale - 1f) * cruiseLevel * cruiseLevel * (3f - 2f * cruiseLevel);
+            CruiseFactor = Mathf.Max(multiplayer, Drive != null ? Drive.Factor : 1f);   // remake: the cruise drive's own ramp
         }
 
         void SetFastForward(bool on)
@@ -764,7 +846,7 @@ namespace GoF2Remake.Flight
 
         /// <summary>The player's flight controls (steering, dodge, guns, mining) are off: the game is paused, or in multiplayer
         /// a menu, conversation or map is open (the world goes on there).</summary>
-        public static bool InputHalted => Time.timeScale <= 0f || (GoF2Remake.Data.NetSession.Active && (halted || GoF2Remake.World.SpaceHooks.MultiplayerWindowIsOpen))
+        public static bool InputHalted => Time.timeScale <= 0f || ConversationRuns || (GoF2Remake.Data.NetSession.Active && (halted || GoF2Remake.World.SpaceHooks.MultiplayerWindowIsOpen))
                                           || GoF2Remake.World.SpaceHooks.QuestionOpen   // an event's question (multiplayer)
                                           || GoF2Remake.World.SpaceHooks.DockedInOrbit;  // remake mods: docked inside the orbit
 
@@ -774,7 +856,7 @@ namespace GoF2Remake.Flight
         public static bool PressesBlocked => InputHalted || Time.frameCount - lastHaltedFrame <= 1;
         static int lastHaltedFrame = -10;
 
-        void OnDestroy() { halted = false; CruiseFactor = 1f; Cruising = false; MusicPaused = false; if (!GoF2Remake.Data.NetSession.Active) AudioListener.pause = false; }
+        void OnDestroy() { halted = ConversationRuns = false; CruiseFactor = 1f; Cruising = false; MusicPaused = false; if (!GoF2Remake.Data.NetSession.Active) AudioListener.pause = false; }
 
         /// <summary>MGame::pauseSounds 0x1a8304: a conversation, hint or map pauses only the sound effects and the engines
         /// (FModSound::pauseAllPlayingSoundFXEvents: the events of the effects category); only the pause menu stops
@@ -795,9 +877,11 @@ namespace GoF2Remake.Flight
 
         void ApplyTimeScale()
         {
-            halted = MenuOpen || paused || pauseMenuOpen;
-            float scale = MenuOpen || paused || pauseMenuOpen ? 0f : FastForward ? FastForwardScale : TimeExtender.Active ? TimeExtender.WorldScale : 1f;
+            halted = MenuOpen || paused || pauseMenuOpen || conversation;
+            bool talkRuns = conversation && Settings.PlayOnInConversations;
+            float scale = MenuOpen || paused || pauseMenuOpen || (conversation && !talkRuns) ? 0f : FastForward ? FastForwardScale : TimeExtender.Active ? TimeExtender.WorldScale : 1f;
             if (GoF2Remake.Data.NetSession.Active) scale = 1f;   // multiplayer: one player's pause doesn't stop the shared world
+            ConversationRuns = talkRuns && !GoF2Remake.Data.NetSession.Active;   // multiplayer: the co-op hold instead
             if (Time.timeScale != scale) Time.timeScale = scale;
             // A halted clock also halts the sound, as PauseMenu does: the engine loops, a boost fired just before and every
             // other source played on through a conversation. The voice, UI and star-map sources ignore the listener pause.

@@ -25,6 +25,7 @@ namespace GoF2Remake.UI
             actionButton.AddToClassList("detail-action--hidden");
             actionButton.RemoveFromClassList("detail-action--disabled");
             actionButton2?.AddToClassList("detail-action--hidden");
+            actionButton2?.RemoveFromClassList("detail-action--move");
             // Remake: the trade arrows back in place (an ingredient moves ADD under the blueprint's amount, hides the left one).
             sellButton.style.display = DisplayStyle.Flex;
             if (sellButton.parent != sellHome) sellHome.Insert(Mathf.Min(sellHomeIndex, sellHome.childCount), sellButton);
@@ -45,7 +46,7 @@ namespace GoF2Remake.UI
             {
                 var it = db.Item(item);
                 detailIcon.style.backgroundImage = new StyleBackground(ItemInfo.ItemIcon(item));
-                detailName.text = ItemInfo.ItemName(item);
+                detailName.text = ItemInfo.TaggedItemName(item);
                 detailSub.text = $"{ItemInfo.Category(it)}  ·  {T(133)} {it.techLevel}";
                 foreach (var (label, value) in ItemInfo.ItemStats(it)) AddStat(label, value);
                 detailText.text = ItemInfo.ItemText(db, it, hangar.SystemIndex);
@@ -74,7 +75,16 @@ namespace GoF2Remake.UI
                     buyButton.EnableInClassList("trade-arrow--disabled", stock <= 0);
                 }
                 else if (selected.kind == RowKind.Slot)
+                {
                     ShowAction(T(282).ToUpperInvariant(), !(selected.equipment >= 0 && Session.Equipment[selected.equipment].builtIn));
+                    // Remake (players' feedback): MOVE to the next slot of its type, for a type with more than one slot.
+                    if (actionButton2 != null && selected.equipment >= 0 && hangar.NextSlot(selected.equipment) >= 0)
+                    {
+                        SetActionText(actionButton2, Localization.Extra("shopMoveSlot", "MOVE"));
+                        actionButton2.RemoveFromClassList("detail-action--hidden");
+                        actionButton2.AddToClassList("detail-action--move");
+                    }
+                }
                 else if (selected.kind == RowKind.CargoItem)
                 {
                     var r = hangar.CanMount(item, out _);
@@ -85,7 +95,7 @@ namespace GoF2Remake.UI
             {
                 var s = db.Ship(selected.ship);
                 detailIcon.style.backgroundImage = new StyleBackground(ItemInfo.ShipIcon(selected.ship));
-                detailName.text = ItemInfo.ShipName(selected.ship);
+                detailName.text = ItemInfo.TaggedShipName(selected.ship);
                 detailSub.text = ItemInfo.ShipRaceText(selected.ship);
                 var hullMods = selected.kind == RowKind.OwnShip ? Session.ShipMods
                     : selected.kind == RowKind.ShopShip ? hangar.Stock.ModsOf(selected.ship)
@@ -134,7 +144,7 @@ namespace GoF2Remake.UI
             string T(int id) => Localization.Get(id);
             var it = db.Item(item);
             detailIcon.style.backgroundImage = new StyleBackground(ItemInfo.ItemIcon(item));
-            detailName.text = ItemInfo.ItemName(item);
+            detailName.text = ItemInfo.TaggedItemName(item);
             int bpShip = Modding.ModBlueprints.ShipOf(item);
             if (bpShip >= 0 && db.Ship(bpShip) is ShipData ship)
             {

@@ -39,7 +39,7 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   along, every change re-measures the hangar height), hangar height + Auto, hull textures: one
   `materials` entry for all meshes, for GLBs without their own), Hardpoints (add by clicking the hull, list, X / Y / Z, mirror,
   centre, delete, slot counts following the points, a turret's facing (see "Missile turrets and salvos"), engine flame
-  radius / length / particles), Loadout
+  shape / half width / half height / length / particles: `glowShape`, see mods-models.md "engine glow discs"), Loadout
   (per-slot item pickers, Auto-fill, god mode / infinite ammo). The 3D editor is `World.ModBuilderGizmo` (balls drawn over the
   hull by `Hidden/GoF2/BuilderGizmo`, Unity-style move arrows along the ship's axes (X = game +x = the pilot's left), a drag on
   a ball slides it over the hull (MeshColliders on layer 22), a flat arrow on the floor toward the nose); the camera is
@@ -174,6 +174,32 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   without one: `WeaponFx.trail` (`TrailLook`, not serialized), `RocketTrail.For(gun, look)`, `GunRig.EnableTrails`); a
   range where the parked ship fires at a target ship 300-450 m off, seen from the side (Gun + GunRig like NetShotMirror; the
   target's hit cube 35 m: at 900 m every shot hit as it left the gun). Tests: `ModBuilderKindsTests`.
+  **A modder's suggestions** (2026-11-02, le zoink's list on Discord): Stations' orbit section has "Held by pirates" and
+  "Docking pads outside the station" (a list: where the ship rests, its own approach point, its own facing, + Docking pad;
+  mods-world.md "Pirate-held stations" / the pads); in the shown orbit (Show its orbit) the jumpgate (cyan), arrivals
+  (amber) and pads (red) are `ModBuilderGizmo` balls bound to the station itself (`ModBuilderSpaceViewOrbit`: its 180 deg
+  turn makes `WeaponSystem.MountToLocal` + the station's rotation = `OrbitLayout.ToUnity`, so the balls' game units are the
+  orbit's), dragged over the hull or along the arrows (Ctrl: 100 units) and saved on release (the orbit built again).
+  Systems: "Held by pirates". Missions: Take an item, Bring cargo's "Hand it in", Restrict travel's "The Khador Drive only",
+  Spawn's hull x / gun damage x, Spawn an NPC ship type (an NPC ship type picker, `RefKind.NpcShip`: the game's five, the
+  project's, other mods'), When something happens "docks at a station's pad outside" (event-graphs.md). A bar mission's "Who
+  can take it" got a note: "One squad in the universe" (the default) was already the suggested "not while another squad
+  runs it" (`EventMissions.Offers` / `OnAccept`).
+  **NPC ships** (2026-11-02, `ModBuilder.Kind.NpcShips` before AiTools, KindCount 16, `Place.Space`;
+  `ModBuilderSpaceViewNpc`, `ProjectNpcShip` (npcships.json, `ModProject.NpcShips`, undo key "npcShips", MCP entry kind
+  `npcShips`, select_entry too): + New NPC ship (a capital ship on the battleship's / carrier's / Vossk battleship's hull,
+  a freighter, a boss, or any of them on a ship's hull, `PickRef(RefKind.Ship)`), Change a game NPC ship (the five game
+  keys, another mod's by key), Remove. The page: name, kind, hull (a ship's or a game look), race, side, hull / hull x /
+  guns x / speed / explosion, missiles, retreat; hardpoints (the game hull's turrets copied in, back to the hull's own,
+  per point kind / XYZ / turret item / upside down / model / hull / name / a hangar's ships and timing); escorts; loot
+  (the game's / its own / nothing); where and how often (chance, count, races, systems, stations, security, ranks, story
+  steps, free play / story only, the game's capital ship's place, condition, distance, a place of its own; a game type
+  its chance, the freighters' count); dock and shop (pads, the game's pads copied in, standing, race ship, signature,
+  repair and its price, markup, cells, ammo, gear, sells); launches. The hull is built beside the orbit's station
+  (`PreviewSpec` -> `Traffic.AssemblyOf` -> `AssembledObject.LoadPrefab`, a mod hull retried every 0.5 s until built)
+  and the hangar's `ModBuilderGizmo` binds to it (hardpoints cyan / amber, pads red): a ball drags over the hull (Ctrl:
+  100-unit snap) or along its arrows, "Click the hull to add" a turret or a pad; every edit saves and re-reads the project
+  (the page and the preview follow). Not yet tried in Play mode.
   **Ship kits** (2026-10-16, #87's customizable ships as a builder kind; `ModBuilder.Kind.Kits`, before AiTools, KindCount
   14; `ModBuilderViewKits`, `ProjectKit` / `ProjectKitPart` in ProjectKits.cs, `ModProject.Kits`, file shipkits.json, in the
   undo steps as "kits", MCP entry kind `kits`): the kit (name, scale, yaw), its slots (add, rename, reorder, remove; a
@@ -266,7 +292,18 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   `SafeArea.EdgeClass` (`KeepClear` gave them margins every 500 ms: they sat off their places on wide windows); a button
   text starting "+ " (or a lone + / − stepper) gets its sign drawn by Painter2D (`ModBuilderScreen.DrawSign`: the font's
   + snapped to unequal 1 / 2 px bars at the UI's non-integer scale; cyan for adding, white on hover, the rest of the text in
-  `mbv-button-label`); `ScrollBars` puts the bar at the viewport's edge and `.gof-scroll-bar` centres itself with
+  `mbv-button-label`); since 2026-11-01 only buttons that add carry the + ("+ Import an event graph…", the dependencies'
+  "+ Add" too) and those changing what the game or the mod already has (class `mbv-change`: Change a game ship / item /
+  station / system / weapon's look, Replace a game track / sound / line / character, Skin a game ship, the other
+  textures, Make this mod a campaign, Change it) a filled pencil (`DrawPencil`), their texts without "+ " in every
+  language; Weapon fx gained "+ New weapon effect" (2026-11-01: a weapon effect of weaponfx.json, `ProjectWeaponEffect`,
+  `ModProject.WeaponEffects`, based on a game weapon picked; its page: name, base, the weapons using it, then the same
+  parts / trail / sounds editor through `Fx(make)` / `FxBase` / `FxFileId`; the range fires it on its base weapon,
+  `ModWeapons.Effect`; Remove effect clears the items' links, `RemoveWeaponEffect`). A weapon taking an effect or a game
+  look (`ProjectItem.EffectId` / `GameLook` / `TakesLook`) shows which, with "Edit the effect" / "Its own look instead";
+  the Items page's "Weapon effect" picks one of the project's effects or any game weapon's look (`EffectChoices`; a
+  turret taking one hides its turret model section: the effect's applies). AI tools: entry kind `weaponEffects`,
+  select_entry `weaponEffects`, the range's item `effect:<id>`; `ScrollBars` puts the bar at the viewport's edge and `.gof-scroll-bar` centres itself with
   `translate: -50%` (subtracting the snapped half width each layout fed back into the next: the bar's width flickered by a
   pixel twice a second).
 - **The builder translated** (2026-10-22): its 875 `Localization.Extra` texts in all 13 `extra_<lang>.json` (the kinds,

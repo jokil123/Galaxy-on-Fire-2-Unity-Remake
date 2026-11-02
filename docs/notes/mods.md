@@ -7,8 +7,9 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
 Player-made content as data (no code: the game is IL2CPP), in `Scripts/Runtime/Modding` (`GoF2Remake.Modding`); the modders'
 guide is `Modding/README.md` (keep it in step, and the AI version `Modding/ai/gof2-modding/SKILL.md` with it: an Agent
 Skill / paste-in guide for Claude and ChatGPT, with `reference.md` from **GoF2 > Build > Modding AI Reference** and the
-how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (items) and `frontier_systems`
-(systems / stations). Items, ships, systems and stations, quests and bar missions (event graphs), voice-over, music.
+how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (items), `frontier_systems`
+(systems / stations); cruise drives (navigation.md "Cruise drive"; a mod's `encounters.json`,
+`ModEncounters`, adds to the cruise encounter table). Items, ships, systems and stations, quests and bar missions (event graphs), voice-over, music.
 
 - **Unreadable mod files** (Android crash reports, 2026-10: "A local file header is corrupt" / "Corrupted data ReadInternal"
   on single GLBs of the GoF3 Ships zip): `ZipSource` reads one entry at a time under its gate, `Dispose` takes the gate too
@@ -96,6 +97,31 @@ how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (
   4-beam tractor based on 69 and a booster based on 73, at Dis): four blue beams at once on four crates, six crates in, the
   one past the range left; the booster's sound index 2 (73's); a quest's `wreck` spawned "Hulk", its `on hacked` paid and
   showed "Hacked Hulk" after the hack (`HackWon` invoked; the hacking game itself not played). Not tested in multiplayer.
+- **A modder's requests, 2026-11-02** (Modding/README.md "Conditions", "Loaner ships", "Multi-grab tractor beams"):
+  **Conditions** `medals(gold | silver | bronze | any)` (counts over `Session.Medals`), `medals(allgold | allsupernova)`
+  (`Achievements.GotAllGoldMedals` / `GotAllSupernovaMedals`) and `bought(ship)` (`EventRunner.GameState`; ship by
+  `NetAdmin.FindShip`): `Session.ShipsBought`, refs "12" / "mod:id" (`Session.ShipRef`, so no renumbering fix-up), saved
+  (`SaveData.shipsBought`), added by `Hangar.SwitchTo` for every caller but a stored Kaamo hull (dealer, lounge seller,
+  Keep, a blueprint's ship); ships bought before 2026-11-02 don't count. **Thynome with every gold medal**: the VoidX first
+  in the dealer's usual roll (`Shop.GenerateShips`, `Story.OnDocked` inserts it) where `getShipBuyList` gives it alone, so
+  Thynome's other ships and the mods' `dealer` ships stay. **Bar missions** (single player, `EventMissions.Startable` in
+  `Offers` and `AcceptLocal`): "mission starts" (the Start node's Starts when, `never` = no bar) and "mission once"
+  (`MissionInfo.once`; the Start node's Only once, a .gof2mission's `"once": true`; `GraphQuestState.once` carries the name
+  through a chain, `CompleteMission` adds it to `GraphQuestsDone`, so `quest(name)` reads 2); a session's bars ignore both.
+  **Event loaners**: `/lend [players] <ship> [keep] | back` (`NetAdmin.Lend`, `Order.Lend` 37; only `PlayerHull` ships
+  with `playerShip`, no `traffic.capital`), the quest step `lend`: `Story.LendForEvent` parks the own ship as the story's
+  loaners (`ParkedShip.lentBy` = the graph, `lentKeep`), a fresh hull or with keep the player's items; the run notes it
+  (`EventRunner.NoteLoaner`, `eventLoaner`) and `End` sends `Lend -1` (single player also when the loaner is the graph's
+  but the run restarted from a checkpoint); `Story.CheckEventLoaner` on load gives it back without the run under way;
+  `HangarUnlocked` false in free play too for an event's loaner. In flight `SpaceLevel.SwapPlayerShip` (the pools keep
+  their share), docked `StationLevel.ReplacePlayerShip`. **Tractor beams**: items.json `tractorColor` (attr 136 = 0x1000000
+  | rgb, `ModContent.TractorColorValue`) tints every beam (`ModWeapons.Tint`: the grey texture copy and `_Color`, as a fx
+  part's `color`); stats `tractorNoLock` 137: no crate candidates in `CombatRadar.Update`, the extra-beam picking runs with
+  one beam too; a steal still locks the EMP'd ship at attr 24 (the modder's 1-hour lock time had stopped steals). Tests
+  `EventExpressionTests`, `EventBarMissionOfferTests`, `EventLoanerTests`, `HangarShipTests`, `ModEquipmentLookTests`,
+  `ShopStockTests`, `StoryRulesTests`; Play mode `ModderRequestsFlightTests` (an npcships.json capital on the battleship's
+  hull with three hardpoints: three turret parts, one destroyed alone, the rest gone with the hull, its escorts; a loaner
+  swapped in flight and back; the beam's materials tinted). Not tested in multiplayer.
 - **Built-in equipment and a steady engine glow** (remake, a modder's requests, 2026-10-16): ships.json `integrated` (new
   ships and overrides; `ModContent.ApplyIntegrated`): `khadorDrive` true / false (`Database.IntegratedDrives`, defaults
   37 / 38 / 40, `Ship::hasJumpDriveIntegrated`; read by `GalaxyMap.HasIntegratedDrive` through `Database.Shared`) and
@@ -137,6 +163,14 @@ how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (
   *behaviour* should use `Look`; story / rule checks keep the real index.
 - **Names** (`GameNames`): every item / ship name and description goes through it (the original's text blocks 1274 / 1041 /
   913 / 977 + index sit back to back: item 233's name would be the first medal's); never `Localization.Get(1274 + i)`.
+- **Mod tags** (remake, TorchOP's request 2026-10-23: tell SH / HD / Alliances / GoF3 content apart; the user: one tag
+  per mod, for everything, not just ships): mod.json `"tag"` (`ModContent.TagOf`, a string or per language) on all a mod
+  adds, never on what it only overrides: `GameNames.ShipTag` / `ItemTag` (a ship blueprint's item: its ship's) /
+  `SystemTag` / `StationTag` (`ModWorld`). `ItemInfo.WithTag` adds it as rich text (`<alpha=#80><size=80%>`, the tag in
+  `<noparse>`; `TaggedShipName`, `TaggedItemName`): the hangar / shop / cargo / Kaamo / pending rows, the hangar details,
+  the carrier shop, the item window, the status screen, the star map's system and planet names, its system panel and
+  planet lore title, the docked station's title and system line (after `ToUpperInvariant`). Everywhere else (toasts,
+  dialogs, selectors, chat, saves) keeps the plain name. Mod Builder: Mod details' "Tag". Tests `ModTagTests`.
 - **Numbers** (`ModRegistry`, `persistentDataPath/mod_registry.json`, outside the Mods folder): single player gives each "mod:id" key the next free
   number after the original table (233+) for good; a key whose mod is off gets a placeholder (`ModContent.IsMissingItem`:
   commodity 22, no price, never stocked) so the table stays 0..N-1 and saves keep their numbers. Sessions number afresh in the
@@ -163,6 +197,19 @@ how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (
   in Play mode with a local test campaign (Mods/test_campaign: Kepler, the Jedi Starfighter, the plasma weapons): the entry,
   the start (station, ship, credits, equipment), only Kepler visible, mod-only dealers, Jedi / Banshee traffic, missions
   inside Kepler, the quest running, save / load keeping it.
+- **Mod DLCs** (remake, 2026-11-01, the user's request: mods that go on after the last DLC; `ModDlcs`, a mod's `dlc.json`:
+  name, description, image, imageHover, showTitle, quest (required), index, intro, introSpeaker, startStation, startShip,
+  credits, equipment, cargo; the guide's "DLCs"): one play order for the DLCs that are on (`ModDlcs.All`): the player's
+  (PlayerPrefs `dlc_order`, set by the Mods browser's DLC row "DLC N of M: plays after X" with Play earlier / later,
+  `ModDlcs.Move`, the whole order saved), then each one's `index`, then load order. Cards with the three campaigns, right
+  after Supernova and before the mods' campaigns, in that order ("DLC N · a mod: X", `MainMenu.PickDlc`) → difficulty →
+  economy → `ModDlcs.Start`: `Story.StartCampaign(Supernova)` and every `Advance` to 162 (each step's own effects), docked
+  at Maissa (93) or its startStation, its ship / credits / gear if given, the DLCs before it counted as played (their
+  quests in `GraphQuestsDone`), its quest pending (`GraphQuestState.RestorePending`). In a finished game
+  (`ModDlcs.StoryFinished`: step 162, not free play, no mod campaign), `StorySpace.CheckAddonEntry` -> `CheckDlcEntry`
+  every 10 s in free flight (no level mission, freelance orbit, mining or autopilot; not in a session): `ModDlcs.Next` = the
+  first DLC not played, none while one runs; its intro (`OpenText`, the speaker's one page), then `GameHooks.StartQuest`.
+  A DLC is played once its quest is done (a failed one is offered again). Tests: `ModDlcsTests`.
 - **New-game options** (`ModGameOptions`, a mod's `gameoptions.json`: id, name, description, image, imageHover, showTitle,
   default): campaign-style cards in the Game options panel (`MainMenu.RefreshModOptions`: the panel goes wide, the toggles in
   a left column, the cards in a right one that scrolls sideways with "N options · scroll for more" past two, Start game under
@@ -309,6 +356,43 @@ how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (
   station's stations.json `materials`, and an interiors.json room's, ignored their `material` filter
   (`ModStations.Build` / `ModInteriors.Build` passed no glTF material name to `ModShipBuilder.MaterialFor`), so such a
   station showed its model's own white materials.
+- **NPC ships** (remake, 2026-11-02, the user's request: "just like flyable ships", ships nobody flies, new or replaced, with
+  loot, escorts and their strength, hardpoints, spawn rate and places, a capital ship's docking and shop; `npcships.json`,
+  Modding/README.md "NPC ships"): `Modding.ModNpcShips` (Game layer; parsed in `ModContent.Parse` into `Parsed.npcShips`,
+  resolved per `ModManager.Revision` by `All()`, ModEncounters' pattern) holds the game's five types (`GameKeys`:
+  battleship, carrier, vossk_battleship, freighter, pirate_boss), every field unset, then the mods' overrides and own types
+  (`NpcShipType`, key "mod:id", `index` = its place in All()). The game's code reads only what a mod set, so without mods
+  (or with untouched fields) every random draw is the game's: `ModNpcShips.Chance(key, 30)` in `TrafficPlan.Build` (the
+  battleship / carrier / Vossk battleship 30 %), the freighters' `spawn.count` only when set, `Changed(key)` null when no
+  mod changed it. Spawning is `TrafficPlanNpcShips.cs` (a TrafficPlan partial: it uses ClearOfStation, RaiderSpawn):
+  `AddNpcType` (a host by `NpcHost`: a mod hull through `ModCapitalShips.Spawn`, a game freighter / battleship hull, a boss
+  as the pirate boss; a game capital hull by `AddCapitalHull`, split out of `AddCapitalShipAt`, its turrets enhanced like
+  `CapitalShips.Enhance`'s), `ApplyNpcType` (name, side, hull / hullFactor, gunFactor on its turrets, speed, explosion,
+  hardpoints drop the hull's turret specs, escorts, loot, dock, `SpawnSpec.CapitalMod` 4 + `capitalEnhanced` when
+  `NeedsCapitalShip`), `AddNpcEscorts` (a capital ship's `NpcLoop` round it, scaled to a mod hull; a freighter's
+  `SpawnSpec.escortLeader` / `escortOffset` = an `NpcOrder` Follow with fight, given in `Traffic.Create`; the game's
+  escorts of the host removed), `RollNpcLoot` (rolled at plan time into lootItem + extraLoot; `keep` = the game's roll
+  too; a capital ship's own crate is `CapitalShip.Attach`'s, skipped or merged), `AddModNpcShips` (new types by `spawn`,
+  after the freighters, not in the quiet orbits: 100-104, 108, 10, Loma, the loot orbits, an Informer orbit, the
+  supernova system before 0x9e; `replaceGame` drops the game's capital ship) and `NpcSpawnHolds`. Game overrides:
+  `AddCapitalShipAt` (a `ship` replaces the hull, its pads dropped unless its own), the freighter loop in `Build`, the
+  pirate boss in `AddPirateEventShips` (a reported boss keeps its name). Hardpoints are ships.json "subsystems"
+  (`ModContent.ReadSubsystems`, split out of ApplySubsystems; "position" for "position_engine", kind "turret" by default,
+  a turret without an item the game's Terran one): `Traffic.Create` attaches `CapitalSubsystems` with
+  `spec.npcType.hardpoints` before a mod hull's own (`GameHardpoints(look)` converts the game's turret tables for the
+  builder: the battleship's offsets are its frame, the carrier's / Vossk's objects (-x, y, -z)). Docking pads: custom
+  `SpacePoints` sets from `NpcPadBase` 100000 + the type's index (`ModNpcShips.Pads`: an approach point, default 2000
+  units above, and the dock point per pad), read by ObjectDocking and `CapitalShips.PadSet`. `CapitalShips`: `Killable`
+  (`NpcShipType.Killable`: every mod type, a game one given a hull or ship), `HasDeck` (`launches`; a game deck on a
+  replaced hull none), `LaunchShip` / `PerWave` / `LaunchTotal` / `LaunchGapMs`, `DockRefusal` (the type's standing,
+  raceShip, signature), `Store(race, dock)` (cells, ammo, `gear`, `sells` first, `Markup`, `Repairs`, `RepairPrice`),
+  `UnitPrice(db, item, store)`. `CapitalShip`: missiles only while `NpcShipType.Missiles`, launches from pads else the
+  hull's top. A freighter's `speed` (`NpcShip` freighter path, `UpdateOrder`'s own). `ProxySpec` bit 25 carries the
+  type's key (a handed-over ship keeps its rules). Debug page (Spawn): "Mod NPC ship" + "Spawn mod NPC ship"
+  (`DebugSpawner.SpawnNpcType`). The ships.json `traffic.capital` ships stay as they were. Tests `ModNpcShipsTests`; Play
+  mode `ModderRequestsFlightTests` (2026-11-02: a capital type's hardpoints as separate turret parts, its escorts); its
+  docking, shop and launches not yet seen in Play mode; not tested in multiplayer (docking at one runs only in the
+  authority's game, as the carrier's).
 - **Turrets don't fire through their own ship** (remake, 2026-10-24, the user's request, for every turret):
   `TurretCore.Host` (the ship it sits on: NpcShip's turret objects their capital host (`Spec.capitalHost`) or the ship
   they ride on, `NpcMountedTurrets` / `PlayerTurret` their ship) and `TurretCore.Fire` checks, once the gun is ready, a
@@ -411,13 +495,29 @@ how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (
   replacement flight model as a hangar ship while the additive Station scene was unloading, capping its drive and hiding
   boost effects. Hangar models keep their context when carried under the orbit's station hull; other orbit ships retain
   flight effects. Tests `EngineStationContextTests` cover flight inputs, hangar previews and all five effect components.
+- **Base content** (`ModManager.BaseContent`, `BaseContentSource`, `Resources/GoF2Base`, 2026-11-01): what the remake adds to the
+  game itself, so far the Khador Slipstream, its blueprint and Khador at Thynome. Why not rows in `items.json`: the original
+  tables are numbered 0..232 back to back with the text blocks (`GameNames`: 233 reads a medal's name), the mods' numbers start
+  at 233 in every player's `mod_registry.json` and saves, so no number after the table is free, and there is no room to reserve
+  a block (`db.Items` stays 0..N-1, so a block far up means thousands of placeholders, and moving the mods up means rewriting
+  every registry and save). So base content takes the mods' route: a mod's layout read through `BaseContentSource` (its `All`
+  lists the files; images are `name.png.bytes`), first in `ModManager.Active`, numbered by `ModRegistry` under "gof2:<id>", saved
+  by key like a mod's. A base item's number differs per player: code names it by key (`ModContent.ItemIndexOf`). It is no mod
+  to the player: `UserMods` is `Active` without it for the browser, a save's `mods`, a session's list and `ActiveSignature`; a mod
+  can't take the id. `item.modded` stays true on it: that flag means "not in the original tables", which is what the original
+  save export and the Mod Builder's base list need. A session numbers its mods first (`EnsureMapping`), so they keep the
+  numbers persistent hosts saw before. `BaseContentTests`; texts are English until they get `extra_<lang>` keys. A
+  manifest that can't be read yet (Resources not ready in a fresh Editor) leaves it out instead of throwing out of
+  `Active`: `BaseContent` is null, `Active` isn't kept, and the read that finds it bumps `Revision` (review, 2026-11-01).
 - **Mod blueprints** (`ModBlueprints`, a mod's `blueprints.json`, parsed with the rest in `ModContent.Parse`): a "ship" or
   "item" product, ingredients, requiresShip (a skin: built only while flying that ship, which it rebuilds, the Kaamo upgrades
   kept), autocomplete (true / false / a price: `Blueprints.AutoCompletePrice` / `CanAutocomplete`, the hangar hides the row),
   available, unlocked (known once available, `UnlockAvailable` at `Shop.EnterStation`), and three sources while available and
   not known (`Offerable`): "lounge" (`AgentGenerator.AddModBlueprintSellers`, a local visitor with offer SellBlueprint, the
   openers 874 / 875 in `LoungeChat.StoryLine`; "stations" pins it to those bars like the game's own sellers, chance 100,
-  `LoungeAllowedAt`), "derelict" (`TrafficPlan.Build`: one hackable freighter wreck per visit at
+  `LoungeAllowedAt`; "seller" there puts a named character in instead of a local visitor: a story speaker's face, race and
+  own lines for the offer, the sale and after it, `ModBlueprints.Seller`, `AgentGenerator.PlaceModSeller`, `LoungeChat.SellerOf`;
+  `AddNamedSellers` adds them to a bar whose visitors were kept, a station among the last 3), "derelict" (`TrafficPlan.Build`: one hackable freighter wreck per visit at
   most, `TrafficPlan.HackableWreck` + `SpawnSpec.modBlueprint`; `Traffic.OnHackWon` leaves a data crate; "stations" limits it
   to those orbits, `RollDerelict(station)` / `DerelictAllowedAt`, the chance then defaulting to 100, a list of unknown ones =
   nowhere; "position" [x, y, z] game units in the orbit, else out in front) and "drops" per race or per ship type (`{
@@ -459,7 +559,9 @@ how-to `Modding/ai/README.md`), the examples `Modding/Examples/plasma_arsenal` (
   temporaryCachePath/ModImport (Android: `ModImportActivity`, `Assets/Plugins/Android/ModImportActivity.java`, a see-through
   activity around ACTION_OPEN_DOCUMENT that copies on a worker thread and is polled through its static fields, registered
   in the unityLibrary manifest by the Editor's `AndroidModImportActivity`; Windows: `FileDialog.Open(title, filter, exts)`;
-  Linux: zenity, else kdialog, on a worker thread; macOS: osascript's choose file; UWP: `FileOpenPicker` on the UI thread;
+  Linux: zenity, else kdialog, on a worker thread; macOS: AppKit's NSOpenPanel, modal like Windows (`FileDialog.Mac`,
+  objc_msgSend; osascript's choose file on a worker thread lost the pick: the Mod Builder's .glb picked, then nothing,
+  2026-11-02); UWP: `FileOpenPicker` on the UI thread;
   the Editor: its open panel; iOS: the document picker, `Plugins/iOS/FileImportPicker.mm`, which moves the system's
   "asCopy" copy out of tmp/<bundle id>-Inbox (copied, it stayed there as a second copy); `ModImport.Available`),
   `Inspect` reads it as a zip mod (mod.json, a valid id),

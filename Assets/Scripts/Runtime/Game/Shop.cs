@@ -53,8 +53,20 @@ namespace GoF2Remake.Data
         public static int RaceOfShip(int ship) => ship >= 0 && ship < ShipRace.Length ? ShipRace[ship] : CustomShips.Get(ship)?.race ?? -1;
 
         /// <summary>DAT_00254930 (Item::canBeInstalledMultipleTimes): categories a ship can mount only once.</summary>
-        static readonly HashSet<int> OnePerShip = new HashSet<int> { 8, 9, 10, 13, 14, 15, 16, 17, 18, 19, 21, 26, 27, 28, 29, 33, 35, 37, 38, 41 };
+        static readonly HashSet<int> OnePerShip = new HashSet<int> { 8, 9, 10, 13, 14, 15, 16, 17, 18, 19, 21, 26, 27, 28, 29, 33, 35, 37, 38, 41, Flight.CruiseDrive.Kind };
+        /// <summary>'category': an item's one-per-ship kind (KindOf), its category for the originals.</summary>
         public static bool CanInstallMultiple(int category) => !OnePerShip.Contains(category);
+
+        /// <summary>Remake: a cruise drive (Flight.CruiseDrive), a mod item made from the Khador Drive with cruiseSpeed (attr 133).</summary>
+        public static bool IsCruiseDrive(ItemData it) => it != null && it.TypeId == 3 && it.Attr(Flight.CruiseDrive.SpeedAttr) > 0;
+
+        /// <summary>The one-per-ship kind an item belongs to (Hangar's install and swap rules, FirstMounted): its category, or
+        /// a remake kind of its own past the categories: a cruise drive keeps its base's category 18 (the Khador Drive's icon
+        /// and look) but is fitted beside a Khador Drive, not in its place.</summary>
+        public static int KindOf(ItemData it) => it == null ? -1 : IsCruiseDrive(it) ? Flight.CruiseDrive.Kind : it.categoryId;
+
+        /// <summary>The mounted cruise drive, null without one.</summary>
+        public static ItemData MountedCruiseDrive(Database db) => FirstMounted(db, Flight.CruiseDrive.Kind);
 
         /// <summary>The original's top tech level, of its items and its stations alike (stations 0-10, items 1-10).</summary>
         public const int TopTech = 10;
@@ -206,10 +218,11 @@ namespace GoF2Remake.Data
         /// <summary>Adds a row to a station's stock, keeping item index order.</summary>
         public static void InsertStock(StationStock stock, ItemStack row) => InsertSorted(stock.items, row);
 
-        /// <summary>Ship::getFirstEquipmentOfSort: the first mounted item of a category, or null.</summary>
+        /// <summary>Ship::getFirstEquipmentOfSort: the first mounted item of a category (a one-per-ship kind, KindOf: a cruise
+        /// drive made from the Khador Drive isn't a jump drive here), or null.</summary>
         public static ItemData FirstMounted(Database db, int category)
         {
-            foreach (var e in Session.Equipment) { var it = db.Item(e.item); if (it != null && it.categoryId == category) return it; }
+            foreach (var e in Session.Equipment) { var it = db.Item(e.item); if (it != null && KindOf(it) == category) return it; }
             return null;
         }
 
@@ -247,7 +260,11 @@ namespace GoF2Remake.Data
             {
                 var it = db.Item(items[n]);
                 if (it == null) continue;
-                if (system == 25) { prices[n] = it.maxPrice; continue; }   // Loma: always the maximum (shop.md uncertainty 4)
+                if (system == 25)   // Loma: the maximum; the iOS 1.1.19 build charges x 1.05 (Status::calcCargoPrices), the Android
+                {                   // 2.0.16 build exactly the maximum: the Default economy (the iOS / PC tables) takes the iOS rule
+                    prices[n] = Session.Economy == Economy.Default ? (int)(it.maxPrice * 1.05f) : it.maxPrice;
+                    continue;
+                }
                 float span = Distance(db, it.lowestPriceSystem, it.highestPriceSystem);
                 float cur = Distance(db, it.lowestPriceSystem, system);
                 float f = 100f / span * cur / 100f;                         // span 0 -> inf / NaN -> 1
@@ -313,6 +330,7 @@ namespace GoF2Remake.Data
             if (stock.agents == null || (stock.agents.Count == 0 && station != 108)) stock.agents = AgentGenerator.CreateAgents(db, station);   // saves from before the bar
             // An evacuated supernova station's lounge is empty (AgentGenerator.CreateAgents): visitors a save kept from before go.
             if (InSupernovaSystem(SystemOf(db, station), station)) stock.agents.Clear();
+            AgentGenerator.AddNamedSellers(db, station, stock.agents);
             // The Kaamo Club never has a dealer (getShipBuyList); a save from a test build that gave it one is cleared.
             if (station == 108 && stock.ships != null) stock.ships.Clear();
             // Status::departStation: at the owned club the storage is the station's stock (one shared list here).
@@ -343,6 +361,11 @@ namespace GoF2Remake.Data
 
         public const int TimeExtenderCategory = 26;
 
+        /// <summary>getItemBuyList's factor on an item's occurrence chance, capped at 1.5: iOS 1.1.19 (taken with the Default
+        /// economy) (step + 10) / 45; Android 2.0.16 (step + 25) / 45.</summary>
+        internal static float StockFactor(int mission) =>
+            Mathf.Min(1.5f, (mission + (Session.Economy == Economy.Default ? 10 : 25)) / 45f);
+
         static List<ItemStack> GenerateItemsOriginal(Database db, int station)
         {
             var list = new List<ItemStack>();
@@ -360,7 +383,7 @@ namespace GoF2Remake.Data
             int system = st?.system ?? 0;
             int race = RaceOfSystem(db, system);
             bool hardcore = Session.IsExtreme;
-            float k = Mathf.Min(1.5f, (mission + 25) / 45f);
+            float k = StockFactor(mission);
             int lowTech = station == 105 || station == 107 ? 0 : techS < 4 ? 1 : techS / 2;
 
             foreach (var it in db.Items)
@@ -425,6 +448,10 @@ namespace GoF2Remake.Data
             // getItemBuyList's story extras: the Luur hazard suit (190) first at 139 in system 25, the volatile Void Essence
             // (209) at 126 (one at 117).
             if (!Session.FreePlay && mission == 139 && system == 25 && !list.Exists(s => s.item == 190)) list.Insert(0, new ItemStack(190, 1));
+            // iOS 1.1.19 (the Default economy): during steps 17..24 every shop has a 40 % chance of one AB-1 Retractor (68), in
+            // place of the Android build's step-23 seller at Thynome (AgentGenerator.CreateAgents).
+            if (Session.Economy == Economy.Default && !Session.FreePlay && mission >= 17 && mission <= 24 && Random.Range(0, 100) < 40
+                && !list.Exists(s => s.item == 68)) list.Insert(0, new ItemStack(68, 1));
             if (station == 126 && !list.Exists(s => s.item == 209)) InsertSorted(list, new ItemStack(209, mission == 117 ? 1 : Random.Range(0, 10) + 1));
             if (Session.FreePlay && station == 78 && !list.Any(s => db.Item(s.item)?.categoryId == 19)) InsertSorted(list, new ItemStack(86, 1));
             if (Session.FreePlay && station == 78 && !list.Any(s => s.item == GalaxyMap.EnergyCellItem))
@@ -469,21 +496,29 @@ namespace GoF2Remake.Data
                     if (Session.CompletedWorld || (entries[k] < Session.Wanted.Count && Session.Wanted[entries[k]].terminated)) ships.Add(45 + k);
                 return ships;
             }
-            if (station == 10 && (Achievements.GotAllGoldMedals || Session.CompletedWorld)) return new List<int> { 8 };   // Thynome: the VoidX
+            // Thynome: the VoidX with every gold medal. getShipBuyList gives it alone; the remake (a modder's request,
+            // 2026-11-02) puts it first in the dealer's usual roll, so Thynome's other ships and the mods' dealer ships stay.
+            bool voidX = station == 10 && (Achievements.GotAllGoldMedals || Session.CompletedWorld);
             int race = RaceOfSystem(db, system);
-            int n = Random.Range(0, 6) + (station == 41 ? 1 : 0);
-            if (n == 0) return ships;   // getShipBuyList: no rolls, no extras either
+            // Android 2.0.16: rnd 6 ships (+1 at 41), 1 in 6 an empty dealer, a duplicate roll dropped; iOS 1.1.19 (the Default
+            // economy): rnd 4 + 2 (+1 at 41), never empty, a duplicate rolled again.
+            bool ios = Session.Economy == Economy.Default;
+            int n = (ios ? Random.Range(0, 4) + 2 : Random.Range(0, 6)) + (station == 41 ? 1 : 0);
+            if (n == 0) { if (voidX) ships.Add(8); return ships; }   // getShipBuyList: no rolls, no extras either
             for (int i = 0; i < n; i++)
             {
-                int ship;
-                if (i == 0 && station == 41) ship = 10;          // Phantom
-                else if (i == 0 && station == 78) ship = 0;      // Betty
-                else
+                int ship, tries = 0;
+                do
                 {
-                    int r = race;
-                    if (n > 1 && Random.value < 0.22f) { r = Random.Range(0, 5); if (r == race || r == 4) r = 8; }
-                    ship = RandomFighter(r);
-                }
+                    if (i == 0 && station == 41) ship = 10;          // Phantom
+                    else if (i == 0 && station == 78) ship = 0;      // Betty
+                    else
+                    {
+                        int r = race;
+                        if (n > 1 && Random.value < 0.22f) { r = Random.Range(0, 5); if (r == race || r == 4) r = 8; }
+                        ship = RandomFighter(r);
+                    }
+                } while (ios && ships.Contains(ship) && ++tries < 50);
                 if (!ships.Contains(ship)) ships.Add(ship);
             }
             if (race == 0 && Random.Range(0, 7) == 0) ships.Add(62);
@@ -501,6 +536,7 @@ namespace GoF2Remake.Data
             if (race == 0 && Random.Range(0, 8) == 0) ships.Add(51);
             if (system == 17) foreach (int s in new[] { 42, 43, 52 }) if (Random.Range(0, 3) == 0) ships.Add(s);
             Modding.ModUnlocks.AddDealerShips(db, station, race, ships);   // remake mods: ships.json "dealer"
+            if (voidX) ships.Insert(0, 8);
             return ships.Distinct().ToList();
         }
 

@@ -26,8 +26,8 @@
 //    ship hidden (PlayerEgo::hideShipForFirstPersonCameraView), the hit shake x0.001 and the rumble x0.0015. Remake
 //    (FreeLookCamera.Mode.FirstPerson): reachable, on the bow instead of the pivot (FirstPersonSeat), the shake and the
 //    rumble as small turns of the view, the boost's FOV at half.
-//  * The shake and the rumble draw a new random offset each frame of the original's 30 fps. Remake (players' reports
-//    2026-10-18, extreme shaking): each offset is held for that 33 ms (HeldJitter) instead of a new one every rendered
+//  * The shake and the rumble draw a new random offset each frame of the original (OriginalFrame.Ms, 60 Hz). Remake (players' reports
+//    2026-10-18, extreme shaking): each offset is held for that frame (HeldJitter) instead of a new one every rendered
 //    frame (at 144 fps an explosion's rumble jolted the view 2.8 deg every 7 ms), and laid on top of the follow, taken
 //    off again the next frame (UndoJitter): drawn into the eased pose, it piled up through the easing.
 
@@ -76,6 +76,8 @@ namespace GoF2Remake.Flight
         bool lookValid;
         float shakeMs, shakeUnits, rumble;
         bool wasBoosting;
+        Vector3 lastShipPosition;
+        bool cruiseTracked;
         // The shake / rumble on top of the follow (header): the held random directions, the pose without them and the one
         // shown with them.
         Vector3 shakeDir, rumbleDir;
@@ -84,8 +86,8 @@ namespace GoF2Remake.Flight
         Quaternion baseRot, shownRot;
         bool jittered;
 
-        /// <summary>The original's frame (30 fps): a shake or rumble offset lasts this long.</summary>
-        public const float JitterMs = 1000f / 30f;
+        /// <summary>The original's frame (OriginalFrame.Ms, 60 Hz): a shake or rumble offset lasts this long.</summary>
+        public const float JitterMs = OriginalFrame.Ms;
 
         /// <summary>A random direction in [-1, 1] per axis, drawn again once 'ageMs' reaches JitterMs (the original's frame)
         /// rather than every rendered frame. Shared with the cutscene camera's rumble.</summary>
@@ -166,7 +168,7 @@ namespace GoF2Remake.Flight
             fpActive != null && fpActive.fpShown && fpActive.target != null && fpActive.target.transform == ship ? fpActive.transform.position : ship.position;
 
         void Awake() => cam = GetComponent<Camera>();
-        void OnEnable() => lookValid = false;
+        void OnEnable() { lookValid = false; cruiseTracked = false; }
         // Disabled = another camera holds it (the launch / arrival fly-in, a cutscene, a jump, mining, object docking, the
         // death camera, Action Freeze): the hull shows; enabled again, the cockpit view comes back.
         void OnDisable()
@@ -262,6 +264,18 @@ namespace GoF2Remake.Flight
             bool original = GoF2Remake.Data.Settings.OriginalChaseCamera;
             float posEase = original ? Ease(posK, dtMs) : Follow(posK, dtMs), rotEase = original ? Ease(rotK, dtMs) : Follow(rotK, dtMs);
             slide = Vector3.Lerp(slide, targetSlide, posEase);
+
+            // Remake: a cruise's extra speed is carried, so the follow trails as at the ship's own speed: its lag grows with the
+            // speed, and at a cruise drive's x8 the ship shrank to a dot far ahead (EVERSPACE 2's stays where it is).
+            float cruise = Navigation.CruiseFactor;
+            if (cruiseTracked && cruise > 1f)
+            {
+                var extra = (ship.position - lastShipPosition) * (1f - 1f / cruise);
+                transform.position += extra;
+                lookPoint += extra;
+            }
+            lastShipPosition = ship.position;
+            cruiseTracked = true;
 
             Vector3 desiredPos = ship.TransformPoint(offset + slide);
             Vector3 desiredLook = ship.TransformPoint(lookOffset + lookShift);
@@ -365,6 +379,17 @@ namespace GoF2Remake.Flight
             PlaceBehind();
             if (GoF2Remake.Data.VrFlags.Enabled) transform.SetPositionAndRotation(ship.TransformPoint(GoF2Remake.Data.VrFlags.CockpitSeat), ship.rotation);
             else if (firstPerson && follow == null) transform.SetPositionAndRotation(ship.TransformPoint(FirstPersonSeat()), ship.rotation);
+        }
+
+        /// <summary>Remake: the view an arrival at speed flew in with, in the ship's frame (the follow's lag), after Snap.</summary>
+        public void CarryView(Vector3 local, Quaternion turn)
+        {
+            if (target == null || firstPerson || GoF2Remake.Data.VrFlags.Enabled) return;
+            var ship = target.transform;
+            transform.SetPositionAndRotation(ship.TransformPoint(local), ship.rotation * turn);
+            lookValid = false;
+            lastShipPosition = ship.position;
+            cruiseTracked = true;
         }
 
         /// <summary>The standard view's place behind the ship, at once.</summary>

@@ -14,7 +14,7 @@
 //               inside +-8000 of the target it steers along its own right vector (circles away), so it never fires
 //               close up; visual bank up to 33 deg from the averaged turn, auto-level after 750 ms
 //   firing      target inside the +-0.0076 cone (ship-space unit vector x / y) and +-35000 per axis; one NPC gun
-//   boost       5 % per 5 s, or after losing 40 % of the hull, for 5..8 s (x1.05 / x0.95 per 30 fps frame)
+//   boost       5 % per 5 s, or after losing 40 % of the hull, for 5..8 s (x1.05 / x0.95 per original frame)
 //   avoidance   inside the first landmark's volumes (station, gate), then the first ship's (freighters): heading +=
 //               (away - fwd) * speed * 0.03 plus an extra step (fighters fly through asteroids and each other)
 //   death       sound 20, 1.5..3 s tumbling along the death direction, then Explosion type 0, the hull 300 ms more,
@@ -214,10 +214,15 @@ namespace GoF2Remake.World
         public readonly List<Gun> ExtraGuns = new List<Gun>();
         /// <summary>The ship's model (its pose is what a multiplayer proxy follows), else the ship itself.</summary>
         public Transform Model => model != null ? model : transform;
+        /// <summary>Remake: the warp holds every ship's fire (Traffic.HoldFire).</summary>
+        bool HoldFire => traffic != null && traffic.HoldFire;
         /// <summary>Resources path of the assembled prefab it was built from (Traffic), for multiplayer proxies.</summary>
         public string ModelPath { get; set; }
         /// <summary>A freelance mission's ship (FreelanceOrbit): multiplayer never takes it over from its player.</summary>
         public bool MissionShip { get; set; }
+        /// <summary>Remake co-op: a story level's ship of the leader's (CampaignLevel): shown to the crew, never handed over
+        /// (it goes when the leader leaves the orbit), never dropped with the orbit's authority.</summary>
+        public bool StoryShip { get; set; }
         /// <summary>Multiplayer: this player's own stand-in, never shown to the others (a follower's copy of the mission's
         /// mining plant, FreelanceOrbit).</summary>
         public bool LocalOnly { get; set; }
@@ -346,7 +351,13 @@ namespace GoF2Remake.World
             RadarHidden = spec.radarHidden;
             if (prefab != null)
             {
-                modelGo = Instantiate(prefab, transform, false);
+                modelGo = spec.standIn != null ? spec.standIn : Instantiate(prefab, transform, false);
+                if (spec.standIn != null)
+                {
+                    modelGo.transform.SetParent(transform, false);
+                    SystemApproach.Wake(spec);
+                    spec.standIn = null;
+                }
                 var asm = modelGo.GetComponent<AssembledObject>();
                 // The option, or a model with no NPC engine part at all (the Kaamo Club's 55-63: only the engine glow).
                 playerEngines = (Settings.NpcPlayerEngines || (asm != null && !asm.HasNpcExhaust)) && spec.fixedObject == null && spec.turretAssembly == null
@@ -586,7 +597,7 @@ namespace GoF2Remake.World
                 // AEGeometry::moveForward never touches the fighter's speed (+0x1e0): released, the AI flies at its own
                 // speed again (keeping the scripted one left Harval at ~9 u/ms in 158 and 154's fighters at 0).
                 transform.position += transform.forward * scriptedSpeed * dtMs * M;
-                if (scriptedFire && gun != null && gun.TryFire(transform) >= 0)
+                if (scriptedFire && !HoldFire && gun != null && gun.TryFire(transform) >= 0)
                 {
                     int shot = NpcTables.ShotSound(Race);
                     var clip = assets != null && assets.shots != null && shot < assets.shots.Length ? assets.shots[shot] : null;
@@ -598,7 +609,7 @@ namespace GoF2Remake.World
             if (order != null && UpdateOrder(dtMs)) return;   // an event graph's order (NpcOrder)
             if (IsFreighter)
             {
-                if (!Hp.empDisabled) transform.position += transform.forward * NpcTables.FreighterSpeed * dtMs * M;
+                if (!Hp.empDisabled) transform.position += transform.forward * (Spec.speed > 0f ? Spec.speed : NpcTables.FreighterSpeed) * dtMs * M;   // remake mods: a type's "speed"
                 return;
             }
             reselectTimer += dtMs;

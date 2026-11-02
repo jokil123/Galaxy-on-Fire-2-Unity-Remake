@@ -22,7 +22,7 @@ namespace GoF2Remake.Events
     public enum EventScoreBy { Kills, Time, Points }
     public enum EventWinnerBy { Score, Kills, Time, Points }
     /// <summary>The On node's triggers, by EventRunner' words (TriggerWords).</summary>
-    public enum EventTrigger { PlayerDestroyed, PlayerDocked, PlayerLaunched, PlayerJoined, PlayerLeft, PlayerEntersOrbit, EventShipDestroyed, EnemiesCleared, PlayerKilledPlayer, PlayerRespawned, PlayerArrives, WreckHacked }
+    public enum EventTrigger { PlayerDestroyed, PlayerDocked, PlayerLaunched, PlayerJoined, PlayerLeft, PlayerEntersOrbit, EventShipDestroyed, EnemiesCleared, PlayerKilledPlayer, PlayerRespawned, PlayerArrives, WreckHacked, PlayerDocksAtPad }
     public enum EventRace { Maker, Terran, Vossk, Nivelian, Midorian, Pirate, Void, Specter }
     public enum EventBehaviour { Enemy, Friendly, Neutral, Standing }
     public enum EventCheat { God, Ammo, Cooldown, Boost, OneHit, Locks, Shopping, Jumps }
@@ -207,6 +207,13 @@ namespace GoF2Remake.Events
                 {
                     if (kind == EventKind.BarMission) Raw("mission kind mission");
                     Raw("mission title " + missionTitle);
+                    if (kind == EventKind.BarMission)
+                    {
+                        // Single player: offered only while Starts when holds; Only once: never again once completed.
+                        string barStarts = Clean(start, Get(start, "StartsWhen", false));
+                        if (barStarts.Length > 0) Raw("mission starts " + barStarts);
+                        if (start.values.ContainsKey("OnlyOnce") && Bool(start, "OnlyOnce")) Raw("mission once");
+                    }
                     string offer = (Get(start, "MissionOffer", false) ?? "").Replace("\r", "").Trim().Replace("\n", "\\n");
                     if (offer.IndexOf('#') >= 0) Warning(start, "\"#\" starts a comment in the script: the offer text is cut there.");
                     if (offer.Length > 0) Raw("mission offer " + offer);
@@ -305,7 +312,7 @@ namespace GoF2Remake.Events
             }
 
             /// <summary>EventRunner' trigger words, by EventTrigger.</summary>
-            static readonly string[] TriggerWords = { "died", "docked", "launched", "joined", "left", "entered", "kill", "cleared", "pvpkill", "respawned", "near", "hacked" };
+            static readonly string[] TriggerWords = { "died", "docked", "launched", "joined", "left", "entered", "kill", "cleared", "pvpkill", "respawned", "near", "hacked", "pad" };
 
             // ---- the steps ----
 

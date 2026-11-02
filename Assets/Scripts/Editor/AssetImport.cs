@@ -34,13 +34,43 @@ namespace GoF2Remake.EditorTools
             || path.StartsWith("Assets/Resources/GoF2Hud/") || path.StartsWith("Assets/UI/")
             || (path.StartsWith(ImportSettings.Root + "/Textures/") && name.Contains("cubemap"));
 
+        /// <summary>The shop icons (Build Item Icons / Hull Icons, Resources/GoF2Icons): BC7 (ASTC 4x4 on Android) instead of
+        /// the normal quality's DXT5, same size in memory; a player's report (2026-11): its 4x4 blocks smeared the striped
+        /// frames and the icons' fine lines, so they looked less sharp than the original's (the same 178 x 86 cells, drawn
+        /// uncompressed). No mipmaps: the lists draw them at 0.8-2x.</summary>
+        static void ShopIcon(TextureImporter ti)
+        {
+            ti.textureType = TextureImporterType.Default;
+            ti.mipmapEnabled = false;
+            ti.alphaIsTransparency = true;
+            ti.wrapMode = TextureWrapMode.Clamp;
+            ti.npotScale = TextureImporterNPOTScale.None;
+            ti.textureCompression = TextureImporterCompression.CompressedHQ;
+            ti.ignoreMipmapLimit = true;   // the Texture quality option leaves them whole (they have no mips anyway)
+        }
+
         void OnPreprocessTexture()
         {
             string name = Path.GetFileNameWithoutExtension(assetPath).ToLowerInvariant();
             if (KeepsFullMips(assetPath, name)) ((TextureImporter)assetImporter).ignoreMipmapLimit = true;
+            if (assetPath.StartsWith(ItemIconBuilder.OutDir + "/")) { ShopIcon((TextureImporter)assetImporter); return; }
             if (!assetPath.StartsWith(ImportSettings.Root + "/Textures/")) return;
             var ti = (TextureImporter)assetImporter;
             ti.maxTextureSize = 2048;
+            // Modified: a replacement texture larger than 2048 px (a high-resolution repaint, e.g. the Valkyrie battlestation's
+            // 4096 px hull) was cut back to 2048 and looked as pixelated as the original on the km-wide hulls. Desktop keeps
+            // it up to 4096 in high quality; Android stays at 2048 (memory). The original textures (2048 at most) are unchanged.
+            ti.GetSourceTextureWidthAndHeight(out int srcW, out int srcH);
+            if (Mathf.Max(srcW, srcH) > 2048)
+            {
+                ti.maxTextureSize = 4096;
+                // BC7 / BC5 instead of BC1 / DXT5nm: the 4x4 blocks of the normal quality stepped every slanted edge.
+                ti.textureCompression = TextureImporterCompression.CompressedHQ;
+                var android = ti.GetPlatformTextureSettings("Android");
+                android.overridden = true;
+                android.maxTextureSize = 2048;
+                ti.SetPlatformTextureSettings(android);
+            }
             ti.mipmapEnabled = true;
 
             if (name.Contains("_normal_specular") || name.EndsWith("_normal"))
@@ -363,16 +393,48 @@ namespace GoF2Remake.EditorTools
                         // doesn't know the shader and turns the pass on whenever the Editor loads the material (Play mode,
                         // batch runs, builds). Turned off here, every load rewrote the .mat files.
                         if (urp && !interior) mat.shader = Shader.Find("GoF2/Hull") ?? mat.shader;
+                        // Modified: the Valkyrie battlestation's hull is mapped at an angle in places (its UV islands turned on the
+                        // texture), and up close its km-wide hull showed those diagonal edges as stair-step stripes: sampled
+                        // bicubic there (GoF2/Hull's _GOF2_BICUBIC), only on its own pixels.
+                        if (urp && !interior && nrmRel.Contains("v_station_battlestation")) mat.EnableKeyword("_GOF2_BICUBIC");
                         if (urp) { mat.EnableKeyword("_METALLICSPECGLOSSMAP"); mat.SetFloat("_Smoothness", 0.8f); }
                         else { mat.EnableKeyword("_METALLICGLOSSMAP"); mat.SetFloat("_GlossMapScale", 0.8f); }
                     }
                 }
                 mat.SetFloat("_Metallic", 0f);
+                // Remake: "bump_alpha_glow" (material 99006, the remodelled Nivelian hangar's launch pads,
+                // hangar_nivelian_alt_alpha_add): the room's normal map, blended by the diffuse's alpha like the _alpha
+                // layers and glowing like them (they're unlit at _Glow 1: the diffuse as emission).
+                if (urp && m.shading == "bump_alpha_glow") MakeLitAlphaGlow(mat, main);
             }
             else mat.SetTexture("_MainTex", main);
 
             AssetDatabase.CreateAsset(mat, path);
             return mat;
+        }
+
+        /// <summary>URP Lit alpha-blended (straight alpha, no depth write, no shadows) with 'emission' as its emission map.</summary>
+        static void MakeLitAlphaGlow(Material mat, Texture2D emission)
+        {
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend", 0f);
+            mat.SetFloat("_BlendModePreserveSpecular", 0f);
+            mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            mat.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+            mat.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+            mat.SetFloat("_ZWrite", 0f);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.renderQueue = (int)RenderQueue.Transparent;
+            mat.SetShaderPassEnabled("DepthOnly", false);
+            mat.SetShaderPassEnabled("ShadowCaster", false);
+            mat.SetTexture("_EmissionMap", emission);
+            mat.SetColor("_EmissionColor", Color.white);
+            mat.EnableKeyword("_EMISSION");
+            // URP 17.7's BaseShaderGUI keeps _EMISSION only with this flag: with None its ValidateMaterial (run whenever the
+            // Editor loads the material) turned the glow off again.
+            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeDirectEmission;
         }
 
         [MenuItem("GoF2/Import/Reapply Import Settings", priority = 300)]

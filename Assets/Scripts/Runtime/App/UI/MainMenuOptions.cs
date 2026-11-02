@@ -123,6 +123,7 @@ namespace GoF2Remake.UI
             foreach (var n in new[] { "campaignBack", "difficultyBack", "economyBack", "gameOptionsBack", "loadBack", "optionsBack", "aboutBack", "multiplayerBack" }) Set(n, "‹  " + T(170));
             string mp = Localization.Extra("multiplayer", "Multiplayer").ToUpperInvariant();
             Set("multiplayerButton", mp);
+            Set("coopButton", Localization.Extra("coopTitle", "Co-op campaign").ToUpperInvariant());
             Set("multiplayerTitle", mp);
             Set("mpBadge", Localization.Extra("mpExperimental", "Experimental").ToUpperInvariant());
             Set("mpIntro", Localization.Extra("mpIntroShort", "Meet other pilots, form squads and fly missions together."));
@@ -145,6 +146,13 @@ namespace GoF2Remake.UI
             Set("mpWorldLabel", Localization.Extra("mpWorld", "World").ToUpperInvariant());
             Set("mpWorldFresh", Localization.Extra("mpWorldFresh", "Fresh").ToUpperInvariant());
             Set("mpWorldPersistent", Localization.Extra("mpWorldPersistent", "Persistent").ToUpperInvariant());
+            Set("mpCoopStrengthLabel", Localization.Extra("mpCoopStrength", "Enemies per player").ToUpperInvariant());
+            Set("mpCoopStrength0", Localization.Extra("mpDebugOff", "Off").ToUpperInvariant());
+            foreach (int pct in GoF2Remake.Data.CoopCampaign.StrengthChoices)
+                if (pct > 0) Set("mpCoopStrength" + pct, "+" + pct + "%");
+            Set("mpCoopRewardsLabel", Localization.Extra("mpCoopRewards", "Story credits").ToUpperInvariant());
+            Set("mpCoopRewardsShared", Localization.Extra("mpCoopRewardsShared", "Shared").ToUpperInvariant());
+            Set("mpCoopRewardsFull", Localization.Extra("mpCoopRewardsFull", "Each in full").ToUpperInvariant());
             Set("mpModsOff", Localization.Extra("mpDebugOff", "Off").ToUpperInvariant());
             Set("mpModsOn", Localization.Extra("mpDebugAllowed", "Allowed").ToUpperInvariant());
             ApplyHostMods();
@@ -155,6 +163,7 @@ namespace GoF2Remake.UI
             Set("mpJoinText", Localization.Extra("mpJoinCodeLabel", "Or join with a code or an address").ToUpperInvariant());
             if (mpAddress != null) mpAddress.textEdition.placeholder = "ABC123  /  192.168.1.20";
             Set("mpJoin", Localization.Extra("mpJoin", "Join").ToUpperInvariant());
+            ApplyPanelMode();   // the Co-op campaign screen's own title and texts
 
             Set("campaignTitle", T(103));
             Set("debugTitle", Localization.Extra("debugTitle", "Debug").ToUpperInvariant());
@@ -191,16 +200,12 @@ namespace GoF2Remake.UI
             Set("importSavesButton", Localization.Extra("importSaves", "Import saves").ToUpperInvariant());
             Set("importOriginalButton", Localization.Extra("importOriginalSave", "Import original save").ToUpperInvariant());
             Set("exportOriginalButton", Localization.Extra("exportOriginalSaves", "Export for original game").ToUpperInvariant());
-            var originalRow = root.Q("originalSaveRow");
-            if (originalRow != null) originalRow.style.display = Modding.ModImport.Available ? DisplayStyle.Flex : DisplayStyle.None;
             // Without a file dialog (Linux, Android) the files go to and come from the Transfer folder: shown under the buttons.
             var transferNote = root.Q<Label>("saveTransferNote");
             if (transferNote != null)
-            {
                 transferNote.text = SaveTransfer.HasFileDialog ? ""
                     : Localization.Extra("saveTransferFolder", "Exported saves go to, and are imported from:") + " " + SaveTransfer.TransferFolder;
-                transferNote.style.display = SaveTransfer.HasFileDialog ? DisplayStyle.None : DisplayStyle.Flex;
-            }
+            ApplyLoadPanelMode();   // the title and the rows of the Load panel or the co-op save picker
             Set("optionsTitle", T(31));
             Set("tabSound", OptionsCatalog.PageTitle(OptionPage.Sound).ToUpperInvariant());
             Set("tabGraphics", OptionsCatalog.PageTitle(OptionPage.Graphics).ToUpperInvariant());

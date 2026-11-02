@@ -47,7 +47,7 @@ namespace GoF2Remake.UI
             Act(left, T("mbNewQuest", "+ New story mission"), () => NewQuest("quest"), "mbv-add");
             Act(left, T("mbNewMission", "+ New bar mission"), () => NewQuest("mission"), "mbv-add");
             Act(left, T("mbNewEvent", "+ New event"), () => NewQuest("event"), "mbv-add");
-            Act(left, T("mbImportGraph", "Import an event graph…"), ImportGraph, "mbv-add");
+            Act(left, "+ " + T("mbImportGraph", "Import an event graph…"), ImportGraph, "mbv-add");
             Act(left, T("mbRemoveQuest", "Remove"), AskRemoveQuest, "mbv-danger", "mbv-remove");
             questPage = PagePanel(right);
             BuildQuestGraph();
@@ -302,6 +302,7 @@ namespace GoF2Remake.UI
                 {
                     case QuestFieldKind.Station: s = RefLabel(RefKind.Station, s, s); break;
                     case QuestFieldKind.System: s = RefLabel(RefKind.System, s, s); break;
+                    case QuestFieldKind.NpcShip: s = RefLabel(RefKind.NpcShip, s, s); break;
                     case QuestFieldKind.Ship: s = RefLabel(RefKind.Ship, s, s); break;
                     case QuestFieldKind.Item: s = RefLabel(RefKind.Item, s, s); break;
                     case QuestFieldKind.Bool: s = (bool)v ? T("mb_" + f.key, f.english) : ""; break;

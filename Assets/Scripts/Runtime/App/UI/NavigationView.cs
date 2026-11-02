@@ -63,6 +63,8 @@ namespace GoF2Remake.UI
         bool fastForwardPressed;
 
         public bool FastForwardPressed => fastForwardPressed;
+        /// <summary>The fast-forward button pressed or released by code (tests, automation), as a pointer would.</summary>
+        public void SetFastForwardPressed(bool pressed) => fastForwardPressed = pressed;
         public event System.Action AutopilotButton;
 
         // Looked up once per name: the markers ask for theirs every frame (a Resources.Load each, with its path string).
@@ -148,7 +150,7 @@ namespace GoF2Remake.UI
                     Image(m.bracket, Tex("bracket"));
                     layer.Add(m.bracket);
                 }
-                if (t.kind == Navigation.Kind.Jumpgate || t.kind == Navigation.Kind.Waypoint || wormhole || (t.kind == Navigation.Kind.Planet && t.station == gateStation))
+                if (t.kind == Navigation.Kind.Jumpgate || t.kind == Navigation.Kind.System || t.kind == Navigation.Kind.Waypoint || wormhole || (t.kind == Navigation.Kind.Planet && t.station == gateStation))
                 {
                     m.icon = new VisualElement { pickingMode = PickingMode.Ignore, usageHints = UsageHints.DynamicTransform };
                     m.icon.AddToClassList("nav-abs");
@@ -227,7 +229,7 @@ namespace GoF2Remake.UI
             foreach (var m in markers)
             {
                 var t = m.target;
-                if (t.hidden)
+                if (t.hidden || nav.ArrivalHeld)   // remake: an orbit's markers wait for its warp's end, or they give the load away
                 {
                     if (m.bracket != null) m.bracket.style.display = DisplayStyle.None;
                     if (m.icon != null) m.icon.style.display = DisplayStyle.None;
@@ -364,12 +366,15 @@ namespace GoF2Remake.UI
             bool visible = touch && nav != null && !nav.Jumping && (miningPhase == Mining.Phase.Idle || approach)
                            && (Session.FreePlay || Session.CampaignMission > 1);
             navButtons.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-            bool canFf = active && nav.CanFastForward;
+            bool canFf = (active || (nav != null && nav.LockFastForward && !nav.Jumping)) && nav.CanFastForward;   // remake: a stationary lock too
             var ext = nav != null ? nav.Extender : null;
-            clockMode = !canFf && ext != null && !nav.Autopilot && !approach && !nav.Jumping;
-            fastForward.style.visibility = canFf || clockMode ? Visibility.Visible : Visibility.Hidden;
+            // Remake: a mounted cruise drive takes the slot in manual flight (NavigationCruiseDrive); the clock keeps it
+            // while the extender runs (no drive then); the extender stays on its key and in the quick menu.
+            bool canDrive = nav != null && nav.CanUseDrive && (ext == null || !ext.Running);
+            clockMode = !canFf && !canDrive && ext != null && !nav.Autopilot && !approach && !nav.Jumping;
+            fastForward.style.visibility = canFf || canDrive || clockMode ? Visibility.Visible : Visibility.Hidden;
             pill.style.visibility = fastForward.style.visibility;   // Hud::draw 11: the pill only behind the FF / clock icon
-            if (!canFf) fastForwardPressed = false;
+            if (!canFf && !canDrive) fastForwardPressed = false;
             if (clockMode)
             {
                 Image(fastForward, ext.Running || ext.Flashing ? clockOn : clockOff);
@@ -378,7 +383,8 @@ namespace GoF2Remake.UI
             else
             {
                 fastForward.EnableInClassList("nav-button--dim", false);
-                Image(fastForward, fastForwardPressed && (nav.FastForward || nav.Cruise) ? fastForwardOn : fastForwardOff);
+                Image(fastForward, fastForwardPressed && (nav.FastForward || nav.Cruise || nav.DriveCruising || (nav.Drive != null && nav.Drive.Charging))
+                                   ? fastForwardOn : fastForwardOff);
             }
             Image(autopilotButton, active || nav != null && nav.MenuOpen ? autopilotOn : autopilotOff);
             // Hud::draw ~0x1926f6: the Supernova Challenge (0xb7) leaves the autopilot button out (its menu isn't offered).

@@ -45,6 +45,12 @@ namespace GoF2Remake.UI
 
         public static string ItemName(int item) => GameNames.Item(item);
         public static string ShipName(int ship) => GameNames.Ship(ship);
+        /// <summary>Remake (TorchOP's request, 2026-10-23): the name with its mod's tag after it, smaller and half transparent
+        /// ("Veteran [GoF3]"), as rich text for a Label; the plain name without a tag (GameNames.ShipTag / ItemTag).</summary>
+        public static string TaggedShipName(int ship) => WithTag(GameNames.Ship(ship), GameNames.ShipTag(ship));
+        public static string TaggedItemName(int item) => WithTag(GameNames.Item(item), GameNames.ItemTag(item));
+        public static string WithTag(string name, string tag) =>
+            string.IsNullOrEmpty(tag) ? name : $"{name} <alpha=#80><size=80%><noparse>[{tag}]</noparse></size></alpha>";
 
         /// <summary>The ship's race under its name ("" = none, Shop.ShipMakerRace): the four races, Grey and pirates.</summary>
         public static string ShipRaceText(int ship)
@@ -55,6 +61,7 @@ namespace GoF2Remake.UI
         public static string Category(ItemData it) => it == null ? "" : Modding.ModBlueprints.ShipOf(it.index) >= 0
             ? Localization.Extra("bpShipBlueprint", "Ship blueprint")   // a mod's ship blueprint (its hidden item)
             : it.Attr(Flight.PointDefense.Attribute) > 0 ? Localization.Extra("catMissileDefense", "Missile defense")   // (a mod's, on a seatless cabin)
+            : Shop.IsCruiseDrive(it) ? Localization.Extra("catCruiseDrive", "Cruise drive")   // (a mod's, made from the Khador Drive)
             : Localization.Get(221 + it.categoryId);
 
         /// <summary>Attributes the details never list (index, type, price systems, occurrence, prices, Vossk flag, home station).</summary>
@@ -127,6 +134,16 @@ namespace GoF2Remake.UI
                     case 52: rows.Add((T(160), $"{v} %")); break;
                     case 55: rows.Add((T(161), v.ToString())); break;
                     case 59: rows.Add((T(163), $"{v} t")); break;
+                    // Remake: a cruise drive (Flight.CruiseDrive): the speed factor and the distance a leg of energy cells buys.
+                    case Flight.CruiseDrive.SpeedAttr:
+                        rows.Add((Localization.Extra("statCruiseSpeed", "Cruise speed"), "x " + (v / 100f).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)));
+                        break;
+                    case Flight.CruiseDrive.InterstellarAttr:
+                        rows.Add((Localization.Extra("statInterstellar", "Interstellar flight"), Localization.Extra("statInterstellarOn", "Between the systems")));
+                        break;
+                    case Flight.CruiseDrive.RangeAttr:
+                        rows.Add((Localization.Extra("statCruiseRange", "Range per energy cell leg"), $"{Mathf.RoundToInt(v * Flight.Gun.MetersPerUnit)} m"));   // 20 units a metre
+                        break;
                 }
             }
             // Remake: a weapon's damage to shields (Flight.Gun.ShieldFactor: the Disruptor's 200 %, a mod's shieldDamage).
@@ -181,10 +198,12 @@ namespace GoF2Remake.UI
             return rows;
         }
 
-        /// <summary>Item description (1041 + index) and "Known price range:" with the lowest and highest price seen.</summary>
+        /// <summary>Item description (1041 + index) and "Known price range:" with the lowest and highest price seen; Space
+        /// Waste once the Mining Plant is built: where it is sorted (remake, WasteProcessing).</summary>
         public static string ItemText(Database db, ItemData it, int currentSystem)
         {
             string text = GameNames.ItemDescription(it.index);
+            if (it.index == WasteProcessing.Waste && WasteProcessing.PlantBuilt) text += "\n\n" + WasteProcessing.Hint;   // remake
             bool lo = Session.LowestKnownPrice.TryGetValue(it.index, out var low);
             bool hi = Session.HighestKnownPrice.TryGetValue(it.index, out var high);
             if (!lo && !hi) return text;

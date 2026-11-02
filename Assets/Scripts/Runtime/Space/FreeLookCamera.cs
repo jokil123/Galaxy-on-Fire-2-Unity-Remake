@@ -25,6 +25,7 @@
 
 using System;
 using GoF2Remake.Data;
+using GoF2Remake.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -32,7 +33,7 @@ namespace GoF2Remake.Flight
 {
     public class FreeLookCamera : MonoBehaviour
     {
-        const float M = 0.05f, FrameMs = 1000f / 30f, MinDistance = 1500f, MaxDistance = 20000f;
+        const float M = 0.05f, FrameMs = OriginalFrame.Ms, MinDistance = 1500f, MaxDistance = 20000f;
         public enum Mode { Standard = 0, Turret = 1, FirstPerson = 2, FreeLook = 3 }
         const string CockpitPref = "flight_camera_cockpit";
 
@@ -317,8 +318,7 @@ namespace GoF2Remake.Flight
             }
             distance += pinch * scale * -50f;
             pinch = 0f;
-            // A notch reads 1 (the Input System's uniform scroll) or 120 (raw): one step either way.
-            if (mouse != null) wheel += Mathf.Clamp(mouse.scroll.ReadValue().y, -1f, 1f);
+            wheel += MouseWheel.Steps(mouse);
             if (Mathf.Abs(wheel) > 0.01f) { distance += wheel * -50f * frames; wheel *= Mathf.Pow(0.9f, frames); } else wheel = 0f;
             // Remake: the throttle binding (LB / RB, ] / /) zooms in free look; ShipController leaves the throttle alone meanwhile
             // (Discord report, 2026-10-17: no zoom on a controller).

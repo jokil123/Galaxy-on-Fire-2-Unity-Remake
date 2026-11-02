@@ -21,7 +21,27 @@ namespace GoF2Remake.Modding
         public string InteriorIdFor(string name) => UniqueId(name, "room", id => Interiors.Any(s => s.Id == id));
         public string BlueprintIdFor(string name) => UniqueId(name, "blueprint", id => Blueprints.Any(s => s.Id == id));
         public string KitIdFor(string name) => UniqueId(name, "kit", id => Kits.Any(s => s.Id == id));
+        public string WeaponEffectIdFor(string name) => UniqueId(name, "effect", id => WeaponEffects.Any(s => s.Id == id));
         public string GameOptionIdFor(string name) => UniqueId(name, "option", id => GameOptions.Any(s => s.Id == id));
+        public string NpcShipIdFor(string name) => UniqueId(name, "npc", id => NpcShips.Any(s => s.LocalId == id));
+        /// <summary>A new NPC ship of 'kind' (ModNpcShips.Capital / Freighter / Boss) on a game hull ('looksLike') or a ship's.</summary>
+        public ProjectNpcShip AddNpcShip(string name, string kind, string looksLike, string ship)
+        {
+            var o = new JObject { ["id"] = NpcShipIdFor(name), ["kind"] = kind, ["name"] = name };
+            if (!string.IsNullOrEmpty(ship)) o["ship"] = ProjectEntry.RefToken(ship);
+            else if (!string.IsNullOrEmpty(looksLike)) o["looksLike"] = looksLike;
+            o["spawn"] = new JObject { ["chance"] = 20 };
+            var s = new ProjectNpcShip(o);
+            NpcShips.Add(s);
+            return s;
+        }
+        /// <summary>A change to one of the game's NPC ships (ModNpcShips.GameKeys) or another mod's ("mod:id").</summary>
+        public ProjectNpcShip AddNpcShipOverride(string key)
+        {
+            var s = new ProjectNpcShip(new JObject { ["override"] = key });
+            NpcShips.Add(s);
+            return s;
+        }
         /// <summary>A quest's file name: one word (a-z 0-9 _), unique among the project's quests and event graphs.</summary>
         public string QuestNameFor(string name) => UniqueId(name, "quest", id => Quests.Any(q => string.Equals(q.Name, id, StringComparison.OrdinalIgnoreCase))
                                                                           || File.Exists(Path.Combine(Folder, ProjectQuest.Folder, id + ".gof2event")));
@@ -76,6 +96,20 @@ namespace GoF2Remake.Modding
             return k;
         }
         public ProjectKit FindKit(string id) => Kits.Find(k => string.Equals(k.Id, id, StringComparison.OrdinalIgnoreCase));
+        /// <summary>A new weapon effect: the game weapon 'baseItem''s look until its parts and sounds are given.</summary>
+        public ProjectWeaponEffect AddWeaponEffect(int baseItem, string name)
+        {
+            var e = new ProjectWeaponEffect(new JObject { ["id"] = WeaponEffectIdFor(name), ["name"] = name, ["base"] = baseItem });
+            WeaponEffects.Add(e);
+            return e;
+        }
+        public ProjectWeaponEffect FindWeaponEffect(string id) => WeaponEffects.Find(e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase));
+        /// <summary>Removes the effect and the "fx" of the items that took it (they look like their base again).</summary>
+        public void RemoveWeaponEffect(ProjectWeaponEffect e)
+        {
+            WeaponEffects.Remove(e);
+            foreach (var it in Items) if (string.Equals(it.EffectId, e.Id, StringComparison.OrdinalIgnoreCase)) it.EffectId = null;
+        }
         /// <summary>A new customizable ship flying 'kit' (this project's): sensible stats, its type 'kitType', the default
         /// build each slot's first part (the game's Normalize does that for a slot left out).</summary>
         public ProjectShip AddKitShip(string id, string name, ProjectKit kit, string kitType)

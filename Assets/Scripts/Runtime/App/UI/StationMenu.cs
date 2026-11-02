@@ -278,6 +278,8 @@ namespace GoF2Remake.UI
             // The hangar window keeps its own selection; Enter / A are read in Update, so no button may also take them.
             root.RegisterCallback<NavigationSubmitEvent>(e =>
             {
+                // Space typed into a field (the Mod Builder's) is a space, not a press of the menu's button (MenuConfirm).
+                if (TextFieldKeys.IsTyping(e, root.focusController?.focusedElement as VisualElement)) { e.StopPropagation(); root.focusController?.IgnoreEvent(e); return; }
                 if (!HangarOpen || DialogOpen || GoF2Remake.Multiplayer.NetChat.Typing) return;
                 e.StopPropagation();
                 root.focusController?.IgnoreEvent(e);
@@ -315,6 +317,7 @@ namespace GoF2Remake.UI
         bool hangarConfirmHeld;
 
         bool medalsChecked, wantedChecked;
+        int coopCatchUp;   // remake co-op: CoopCampaign.CatchUpSerial seen (CheckStory)
 
         readonly System.Collections.Generic.Queue<int> medalQueue = new System.Collections.Generic.Queue<int>();
         VisualElement dialogPicture;
@@ -439,7 +442,7 @@ namespace GoF2Remake.UI
         // ---- remake: Inspect ship (World.HangarInspect, StationLevel.BeginInspect) ----------------------------
 
         // The hangar's camera zooms in on the player's ship and orbits it like the flight's Action Freeze (PhotoMode): a drag
-        // or a finger turns it (with a fling, 0.9 a 30 fps frame), the wheel, a pinch, + / - (Page Up / Down) and the triggers
+        // or a finger turns it (with a fling, 0.9 an original frame), the wheel, a pinch, + / - (Page Up / Down) and the triggers
         // zoom, the arrows / W A S D and the sticks turn it too. The menu flies out meanwhile (the UI animation); a footer
         // keeps Back and the controls' hints. Back: Esc, Backspace, B, or the key that opened it (6 / I, the right stick press).
         // Hide UI (H, the controller's Y) clears the screen (a short click / tap or H / Y again brings it back; a drag still
@@ -693,10 +696,10 @@ namespace GoF2Remake.UI
                 }
                 hangarWindow.HoldDirections(System.Math.Sign(v), System.Math.Sign(h), dtMs);
                 hangarWindow.Update(dtMs);
-                if (hangarConfirmHeld && !(kb != null && (kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed))
+                if (hangarConfirmHeld && !MenuConfirm.Held(kb)
                     && !(pad != null && pad.buttonSouth.isPressed))
                     hangarConfirmHeld = false;
-                if (!hangarConfirmHeld && ((kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) || (pad != null && pad.buttonSouth.wasPressedThisFrame)))
+                if (!hangarConfirmHeld && (MenuConfirm.Pressed(kb) || (pad != null && pad.buttonSouth.wasPressedThisFrame)))
                     hangarWindow.Action();
                 else if ((kb != null && kb.xKey.wasPressedThisFrame) || (pad != null && pad.buttonWest.wasPressedThisFrame))
                     hangarWindow.SecondaryAction();   // Sell a stored hull (Kaamo Club)

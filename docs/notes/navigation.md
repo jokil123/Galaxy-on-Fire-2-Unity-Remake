@@ -21,7 +21,7 @@ the player ship) and `NavigationView` (flight HUD).
 - **Autopilot** (station / jumpgate locked + action): "Target: X" + sound 28; `ShipController.autopilotTarget` steers by
   `moveToPosition` (world up; the model banks into the turn by its return value: the signed turn per frame averaged over
   5 samples × H·750/63·1.2 × 15.14, clamped, eased by dt·H/81 into the yaw rate, `FlightModel.AutopilotBank`, taken per
-  33.3 ms of real time: the frame rate doesn't change it, but fast-forward does, as in the original (its update runs
+  original frame (`OriginalFrame.Ms`, 16.7 ms) of real time: the frame rate doesn't change it, but fast-forward does, as in the original (its update runs
   with dt x 5, so each sample carries five times the turn and the ship banks hard, to the limit 1.2 x a full stick's; a
   player's report with the original's video: the remake divided it away by the scaled dt); #45: it flew the turns flat;
   the rate is also the yaw rate +0x27c, which the model banks from, so handed back the ship eases out of the turn),
@@ -31,11 +31,32 @@ the player ship) and `NavigationView` (flight HUD).
 - **Programmed destination** (`Session.ProgrammedStation`, from the star map;
   `LevelScript::setAutoPilotToProgrammedStation`): at the end of the launch / arrival camera the autopilot flies to its
   planet in this system (the planet lock then jumps by itself), or in another system to the gate (gate orbit) or the
-  gate station's planet. Arriving at the destination's orbit clears it.
+  gate station's planet. Arriving at the destination's orbit clears it. Remake: a destination past the gate neighbours
+  is flown to gate by gate, each later gate jumping on unasked (star-map.md "Jumpgate route planning").
 - **Planet jump** (planet locked + action, no confirmation): sound 5, the camera freezes and looks at the ship, straight
   on at 8 u/ms for 3 s, HUD hidden, then `Space` reloads in that station's orbit (`Session.StationIndex`,
   `PreviousStationIndex`, `ArrivedByTravel`): arrival at 4x the previous station's planet billboard (~4 km), or the
   hidden gate in the gate orbit, facing the station, with the travel fly-in camera.
+- **Planet run** (remake, `NavigationPlanetRun`, `World.PlanetApproach`, 2026-11-01, the user's): a cruise to another station's
+  planet loads that orbit in ahead of the ship as a flight into a system does (`SystemApproach`). By hand: the cruise button
+  held with the nose within 8 deg of a planet (a locked one only when it is that close too), any cruise drive (35 deg off the
+  course or the drive's end stops it, and the orbit fades back out). In place of the planet jump: with a drive that flies between the systems mounted, the action on a locked
+  planet or the autopilot reaching one starts the run instead of the scene, the autopilot flying it and holding the drive;
+  where the drive can't run (hostiles) or stops on the way, the original jump goes (`JumpsBlocked` and `PlanetJumpRefused`
+  asked again first). Both on the planet jump's terms, the user's rule: no charge and no energy cells (`CruiseDrive.Engage`,
+  `RunFree`; by hand only within 15 deg of the course, so a planet ahead is no free cruise to elsewhere). A run keeps the
+  programmed destination as the planet jump does (`SystemJump.LeaveInterstellar`'s `hopping`), and ends instead of leaving
+  while `SystemJump` charges or runs a jump (`Navigation.TravelBusy`). Backdrop planets stay with the camera, so a run
+  flies at a point `RunApproachUnits` (14 km; `ApproachUnits` 20 km until the user's 2026-11-01 "quicker") along the way to
+  the planet, fixed at its start, and leaves at `ArriveUnits` (8 km): 6 km of cruise. `Session.WarpLocal`:
+  the arrival is `OrbitLayout.PlanetArrivalPose`, facing the orbit's planet (unlike a system's), the plain warp with no web, and
+  the orbit's planet starts at the size it had here. This orbit's planets and sun hand over to the next's in the first
+  eighth of the blend (`SystemApproach.HandOverBy`, 0.125; they went only near the arrival, the user, 2026-11-01).
+  Never into an orbit a script sets up on arrival (`Navigation.ScriptedArrival`: a story mission's level, a freelance
+  mission's target, an event quest's; the user, 2026-11-01): its opening (a placed start, an ambush, a cutscene) is written
+  for the planet jump, not a warp's held fire and carried speed, so the jump on its planet is the plain one and a cruise
+  aimed at it no run; an arrival from between the systems loads such an orbit as after a jump (`SystemJump.LeaveInterstellar`).
+  Single player only. No encounters roll during one.
 - **Autopilot menu** (`Hud::initHudMenu(3)`): the touch autopilot button, Q or the controller's View button while
   nothing else flies the ship (1-8 pick an entry; with keys and mouse the entries read "1." to "8.", like the PC
   version's numbered menus; remake: Q / E / V / K do nothing during a level's cutscene, #46); the game pauses
@@ -59,6 +80,45 @@ the player ship) and `NavigationView` (flight HUD).
   camera / controller rumble, the boost sound's start and stop; without a booster item 71's boost sound,
   `PlayerEngine.cruiseClip`: a new pilot's Betty has none), while `IsBoosting` (missile evasion, the recharge, volatile
   goods) stays the real boost's.
+  **To a stationary lock** (remake, 2026-11-02, the user's; `Navigation.LockFastForward`): in manual flight too, under the
+  same rules (>= 20000 units from it, no hostiles, not the time extender), with a stationary object locked
+  (`StillLockUnits`): the station, the jumpgate or a waypoint, or a docking target, the locked asteroid (`Mining.Locked`)
+  or the locked ship (`CombatRadar` publishes `Navigation.ShipLocked`) once it has moved under 0.01 units / ms for 500 ms
+  (`Core/StillLock`, so a proxy's jitter passes and a ship on its way doesn't). Not a planet (the backdrop's, never reached:
+  its lock jumps), nor with a cruise drive fitted (the button stays the drive's), mining, docking or a planet run. The
+  touch button shows (`NavigationView`) and the hint row gains "FAST FORWARD (HOLD)" / "CRUISE (HOLD)" (`FlightHud`'s
+  `lastLockFastForward`). No heading check: away from it the distance rule alone holds.
+- **Cruise drive** (remake, `Flight.CruiseDrive` rules + `NavigationCruiseDrive`; a mod item based on the Khador Drive
+  with `cruiseSpeed` 133 > 0, `Shop.IsCruiseDrive`, its own one-per-ship kind `Shop.KindOf` = `CruiseDrive.Kind` beside the
+  Khador Drive; the ES2 importer's `drives` part, Modding/README.md "Cruise drives"): the fast-forward
+  button in manual flight (the original fast-forward keeps it on the autopilot and the approaches). A fresh press held for
+  attr 37 ms charges (the Khador bar, Extra `hudCruiseDriveCharging`), then one leg's energy cells (attr 38, x2 Extreme, 0
+  with free jumps; `GalaxyMap.RemoveCells`, "-1t Energy Cells", 583 + the cells when short) and the forward speed x attr
+  133 / 100 joins `CruiseFactor` (its own ramp 800 / 1200 ms, `Cruising` and the boost look follow it); every attr 134
+  units pay a leg. Drops (a HUD line with the item's name, Extra `cruiseDrive*`): release, hostiles (`HostilesPresent`), the
+  autopilot / jump / time extender / mining / docking / a halt, a hull the player is pushed out of (`HullBody.obstacle`:
+  stations, freighters, objects; `HullCollision.Sweep` along the nose, and their collision volumes by `Obstacle.RayDistance`
+  where the hull takes no part under the ship-collision setting, 2026-10-31) within `StopUnits` 8000 (the speed eased down from
+  `SlowUnits` 40000), a live asteroid's cube (the ship collision's, grown by `CruiseDrive.SweepRadius`; asteroids have no
+  hull, so `CruiseDrive.CubeAhead`'s slab test along the nose finds them, 2026-10-31) the same way, the locked landmark within
+  `ArriveUnits` 20000, a hit (`PlayerHealth.Hit`). Touch: the drive takes the fast-forward slot while usable (the clock keeps it while
+  the extender runs); hint "CRUISE (HOLD)" (Extra `hudCruiseDrive`). Modelled on No Man's Sky's pulse travel and
+  EVERSPACE 2's cruise mode (behaviour only).
+  **Encounters** (`Flight.CruiseEncounters` rules, `Modding.ModEncounters` the table with the mods' encounters.json,
+  `World.CruiseEncounterSpawner` the spawns, `SpaceLevel` gates them: `EncountersAllowed` = the orbit's own traffic
+  (`!ownPassive`, not a multiplayer orbit another player runs, not the prologue) and `CruiseEncounterRules.Allowed` (not
+  the alien orbit, stations 10 / 100-104 / 108, systems 25 / 27 / 32 / 33, a mods-only system)): after `MinCruiseMs` 6000
+  of a cruise a roll every `CheckIntervalMs` 5000 at `ChancePercent` 10, `CooldownMs` 90000 between two, `MaxPerOrbit` 2;
+  the pick by weight among the entries whose rank / security / free-play conditions hold (`CanHappen`). An ambush spawns
+  `AmbushAheadUnits` 22000 ahead and drops the drive (`Stop.Encounter`, Extra `cruiseDriveEncounter`; a flyby doesn't); a
+  visible entry is a signal: a `Kind.Waypoint` target (the white freelance icon, lockable, the autopilot flies to it)
+  `SignalAheadUnits` 45000 ahead and up to `SignalSideUnits` 25000 aside, "Signal detected: X" (Extra
+  `cruiseSignalFound`), spawned when the ship comes within `SignalReachUnits` 12000, gone after `SignalLifeMs` 180 s or
+  `SignalLostUnits` 200000 away ("Signal lost"); a "quest" entry starts its quest graph (`GameHooks.StartQuest` ->
+  `EventRunner.StartQuest`, single player). Built-ins: pirates 2 + rank / 6 raiders (2..5, hostile), trader a freighter of
+  the system's race (`NpcTables.RandomFreighter`) + 2 locals, derelict 2-4 junk crates with a freighter's loot roll (empty:
+  energy cells), distress a local under attack by 1 + rank / 8 raiders, flyby 3 locals of a random race; names Extra
+  `encounter*`. Modelled on No Man's Sky's pulse encounters and EVERSPACE 2's signals (behaviour only).
 - **Menu order** (`Hud::initHudMenu(3)`): outside the alien orbit Asteroid field, Station, Jumpgate, 573 **Waypoint** (a
   player route not finished: the autopilot follows the route, "Target: Waypoint"), "Destination: X"; then every named
   docking target (also in the alien orbit). The original's only restriction is no menu in mission type 0xb7 (the

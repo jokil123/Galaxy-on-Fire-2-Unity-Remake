@@ -21,7 +21,12 @@ logic (plain C#); `MiningView` draws the lock ring, ore plate, HUD messages and 
   lock time (attr 29, 8000 ms without) - 200 ms. The action prompt then says Mine. Without a drill (`Radar::draw`
   0x157b00: hudEvent 0x14, the original keeps the ring full and repeats it every frame) the remake says 541 "No drill
   installed." once and drops the lock; that asteroid isn't tried again until it has left the crosshair box
-  (`Mining.refusedNoDrill`), so looking away and back starts a new lock.
+  (`Mining.refusedNoDrill`), so looking away and back starts a new lock. The original takes the nearest rock in 3D whose
+  centre is in the box; remake, with the Smart target lock (Options > Gameplay "Target lock", Discord report 2026-10-24:
+  it locked a rock beside the crosshair, not the one under it): a rock the line through the crosshair meets comes first,
+  the front-most (its centre may be outside the box: a big rock over the crosshair), else of those centred in the box the
+  one whose edge is nearest the crosshair in degrees, the rock already locking 0.5 deg ahead so two side by side don't
+  restart the ring by turns (`TargetLockRules.AsteroidScore`, the visible radius `Mining.SurfaceRadius`).
 - **Approach:** player steering off, full throttle, autopilot turn; last 2000 units: exhaust off, landing sound, chase
   camera frozen, the model pitches ~80 deg nose up; stops at `scale * 2500` units, asteroid spin off. The booster works
   on the way in and the landing (MGame::OnTouchBegin refuses it only while drilling: PlayerEgo::isMining is the
@@ -86,6 +91,60 @@ logic (plain C#); `MiningView` draws the lock ring, ore plate, HUD messages and 
   (`MiningGame.LayerDurationMs`) at a rate scaled down to match, so a whole asteroid's ore stays the same; the beam's
   layer time the same (`Mining`). The ES2 importer gives its crystals 200 (ES2's 10 s against 5 s). Test
   `MiningGameTests.AnOresMiningTimeStretchesTheLayersForTheSameOre`.
+- **Ore into cores at the Mido Mining Plant** (`MiningPlant`, 2026-11-01; players' report: the remake never had it): docked
+  at the Coromesk plant (103) with an empty campaign mission (steps 107, 128-130 and from 162 on), not in the alien orbit
+  (`PlayerEgo::isDockedToMiningPlant` 0xadcb8), the docking asks 290 ("#" = 30, Extreme 100) with every ore in the hold
+  (286 without; `MGame::OnUpdate` 0x1ac778, `Traffic.Ask` from `SpaceLevel`'s `Docking.Docked`). Yes
+  (`MGame::OnTouchEnd` 0x1a98d8): ores 154-164 -> core = ore + 11 (Void crystals -> Void essence), Novanium 217 -> 218,
+  each full 30 t (100) of one ore -> 1 t of its core, the rest stays ore; then 291 + the cores, or 292. A mod's ore is
+  listed but not converted (the original's table). Test `MiningPlantTests`.
+- **The Mining Plant's menu** (remake, 2026-11-02; players' wish: every option at once, not one question after the
+  other, then "make the text better"): docking there opens one menu (`SpaceLevel`'s `PlantMenu`, `Traffic.ShowMenu`,
+  `PauseMenu.Choose`) titled 3210, in place of 290's question: two sections (`MenuSection`, drawn by
+  `PauseMenu.BuildSection` with the cargo page's rows): ORE INTO CORES (the ratio, then each ore in the hold with what it
+  makes, "→ 2 t Titanium Core" in cyan, or "18 t more for a core" dimmed; `MiningPlant.Section`) and SPACE WASTE SORTING
+  (the fee a ton, then the waste with "all for 5,100$", "20 t for 2,040$" or "not enough credits";
+  `WasteProcessing.Section`), each with a line when there is nothing to list. Then only the actions that do something
+  now: CONVERT ORE TO CORES with a core to make (`MiningPlant.CoresMade`; the original's Yes: 291 / 292), SORT SPACE
+  WASTE: n t for the fees with a ton paid for (choosing it pays), LEAVE (Back too). Each action comes back to the menu.
+  Its entries are centred (the first and last carry the A / B prompts, which centre a button).
+- **Space Waste sorting at the Mining Plant** (`WasteProcessing`, remake-only, 2026-11-02; players' suggestion on Discord):
+  the plant menu's entry sorts the Space Waste (99) in the hold for a fee, a gamble. Every ton is sorted on its own
+  (players: "just go through each item"; first 10 t lots, dropped): it pays the fee and is junk or one ton of something
+  (gear: one piece); all of the hold's waste, as much as the credits pay for. The waste sells for 5-6$ and stations
+  stock hundreds of tons, so a ton must never pay: the fee comes from the active item table so that a ton returns
+  `Payback` (93 %; 92.3 % after rounding the fee up to 1$) of fee + waste in the long run, both economies (Android 99$ a
+  ton, Default 102-103$; Extreme 1.5x). Tiers (`FindTier`) by what a find is worth a ton in the active table
+  (`ScrapFrom` ..): Scrap 25-99$, Salvage 100-399$, Valuable 400-1,999$, Rare 2,000-4,999$ goods or one piece of shop
+  gear up to tech level 5 (none built from a blueprint), Exceptional 5,000$ and up. The pools are every commodity, ore
+  and core the shops stock (occurrence > 0), so they follow the economy (the Default Economy's Void crystals, 400$, are
+  Valuable; Collectible Figures, 5,005$, Exceptional) and hold 12-32 goods a tier; never junk under 25$ (towels, basic
+  food), never mod items. Contraband-sounding goods are in (drugs, explosives, radioactive goods, organs): the game has
+  no rule against cargo. The four plasmas (201-204) only once the story is past 142 (its plasma kit tutorial counts any
+  plasma aboard), Red Plasma volatile in the hold (`VolatileCargo`); never the K'mirkk Toad Mutagen, the other volatile
+  good (a story item, 117-122, worth 512,500$ in the Android tables). Odds a ton: junk 64 %, Scrap 21, Salvage 11,
+  Valuable 4 of the rest; a rare find 0.3 % (gear 12 : rare goods 6 : exceptional 4). Bad-luck caps (not shown to the
+  player): at most 6 empty tons in a row, a rare find at the latest in the 500th ton since the last. With them 38 % of
+  tons find something, 1 in ~260 t is rare, 1 in ~1,400 t exceptional (`LongRun`, the steady state the fee is worked
+  out from, about 0.1 s once per table). Simulated (1,000 players x 30 holds of 150 t, both economies): a hold finds 57
+  things and gets back 77 % in the median, 53-54 % in the worst tenth, 1 in 4 a profit; after 30 holds the median player
+  is at 91-92 %; 70-80 % of the return is in the common tiers (tuned for "more rewarding": with 10 t lots and the rare
+  finds carrying half the return the median hold got back 50 %, then 72 %). The rolls come from `Session.RunId` and the
+  saved counters `WasteTons` / `WasteDry` / `WasteSinceRare`: reloading finds the same. The result page
+  (`PauseMenu.ShowSorting`, `Traffic.WasteSorted`; a plain message without the HUD): one big grid, a square a ton, forty
+  a row (players: "each one a square", "one big grid"), gone through one by one (70 ms a ton, faster for a big load so
+  it takes about 8 s, a rare find after a 1.4 s pause with its square charging, the last five slowing down like a reel),
+  junk dark, a find lit in its tier's colour (grey, green, blue, purple, gold) as it is reached; the grid scrolls past
+  196 px and follows, the finds' list (best first, with the tier names, so not the colour alone; each row shown once its
+  ton is reached) past 220 px, so the page stays put; then the fees beside what the finds are worth (no find dressed up
+  as a gain); OK / Back skip the rest, then close. Sound: a soft generated tone as a find lights (`LotTones`,
+  `PauseMenu.LotSound`: a sine pip pitched by tier on a pentatonic scale, a two-note chime for Rare / Exceptional; about
+  -25 to -27 dB RMS; at most every 90 ms, none while skipping), then one sound for the best find
+  (`FlightHud.PlaySortingSound`, `CombatAudio.wasteFound` / `wasteRare` / `wasteExceptional`): Button_Sell for Scrap ..
+  Valuable, Hacking_Solved for Rare, Mission_Accomplished for Exceptional, the question window's for nothing usable.
+  Tried and dropped: game clips per lot, a start sound (the hatch, the extractor loop) and a charge before a rare lot
+  (too much); the page silent between (too quiet). Space Waste's item details name the plant once it is built (campaign
+  > 0x54, not free play). The texts say "found", not "won". Test `WasteProcessingTests`.
 - **Remake-only:** Var Hastra (78) always stocks a drill (IMT Extract 1.3) while there is no campaign; releasing the
   stick stops the drill's player movement (the original keeps the last input). The mining plant at 103 is a docking
   target (see "Supernova add-on"). The drill sound (`DrillSound`, event 1's layers by drill_speed = (LAYER_SPEEDS[layer]

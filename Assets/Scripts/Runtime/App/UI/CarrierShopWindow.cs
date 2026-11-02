@@ -302,7 +302,7 @@ namespace GoF2Remake.UI
             {
                 var it = db.Item(o.item);
                 tex = ItemInfo.ItemIcon(o.item);
-                name.text = ItemInfo.ItemName(o.item);
+                name.text = ItemInfo.TaggedItemName(o.item);
                 if (o.notStocked) sub.Add(Badge(X("resupplyBadgeNotStocked", "NOT STOCKED"), "row-badge--cargo"));
                 else if (o.stock == 0) sub.Add(Badge(X("resupplyBadgeSoldOut", "SOLD OUT"), "row-badge--cargo"));
                 if (o.kind == CapitalShips.OfferKind.Ammo)
@@ -387,7 +387,7 @@ namespace GoF2Remake.UI
             }
             var it = db.Item(o.item);
             detailIcon.style.backgroundImage = new StyleBackground(ItemInfo.ItemIcon(o.item));
-            detailName.text = ItemInfo.ItemName(o.item);
+            detailName.text = ItemInfo.TaggedItemName(o.item);
             detailSub.text = $"{ItemInfo.Category(it)}  ·  {T(133)} {it.techLevel}";
             actionButton.style.display = DisplayStyle.None;
             tradeBox.style.display = DisplayStyle.Flex;
@@ -487,7 +487,7 @@ namespace GoF2Remake.UI
                              || (pad != null && (pad.dpad.right.isPressed || pad.buttonSouth.isPressed));
             bool rightPressed = (kb != null && (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame))
                                 || (pad != null && (pad.dpad.right.wasPressedThisFrame || pad.buttonSouth.wasPressedThisFrame));
-            if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) { Buy(1); return; }
+            if (MenuConfirm.Pressed(kb)) { Buy(1); return; }
             if (rightPressed) { heldKey = true; BeginHold(); return; }
             if (!rightHeld) heldKey = false;
             if ((heldKey || heldPointer >= 0) && selected >= 0 && rows[selected].offer.kind != CapitalShips.OfferKind.Repair)

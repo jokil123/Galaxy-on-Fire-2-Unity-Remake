@@ -121,7 +121,7 @@ namespace GoF2Remake.Events
                 {
                     Session.GraphQuests.Remove(record);
                     if (record.kind == GraphQuestState.KindQuest) QuestDone(running, info);
-                    next = new GraphQuestState { name = name, kind = record.kind, title = record.title, station = record.station, offer = record.offer };
+                    next = new GraphQuestState { name = name, kind = record.kind, title = record.title, station = record.station, offer = record.offer, once = record.once };
                     Session.GraphQuests.Add(next);
                     record = null;
                 }
@@ -192,6 +192,12 @@ namespace GoF2Remake.Events
             {
                 if (ended || pilot == null || !InScope(pilot)) return;
                 Fire("hacked", pilot.OwnerClientId, pilot.DisplayName, station, wreck ?? "");
+            }
+
+            internal void OnPadDocked(IPilot pilot, int station)
+            {
+                if (ended || pilot == null || !InScope(pilot)) return;
+                Fire("pad", pilot.OwnerClientId, pilot.DisplayName, station);
             }
 
             /// <summary>A trigger happened: each handler listening for it (in that station, if limited) starts its block.</summary>

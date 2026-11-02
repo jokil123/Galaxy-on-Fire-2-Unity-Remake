@@ -28,7 +28,7 @@ namespace GoF2Remake.Events
                                 ("name", "string", "their name on the lock plate (ship orders use it)"), ("quiet", "boolean", "no other traffic there (default true)"),
                                 ("objective", "text", "the objective meanwhile (optional)") },
             ["cargo"] = new[] { ("item", "ref", "the item"), ("amount", "integer", "how many tonnes"), ("station", "ref", "docked there (optional)"),
-                                ("objective", "text", "the objective meanwhile (optional)") },
+                                ("objective", "text", "the objective meanwhile (optional)"), ("take", "boolean", "handed in: taken from the hold once there") },
             ["reward"] = new[] { ("credits", "number", "credits (or an expression)"), ("items", "items", "[{ item, amount }]"), ("title", "text", "the reward box's title") },
             ["checkpoint"] = new[] { ("name", "string", "its name (optional; one word)") },
             ["startquest"] = new[] { ("quest", "string", "the story mission's name (its file name)") },
@@ -58,6 +58,8 @@ namespace GoF2Remake.Events
                     s = Desc(new JObject { ["type"] = new JArray("number", "string") }, d + "; a number, or an expression as a string"); break;
                 case QuestFieldKind.Station: case QuestFieldKind.Ship: case QuestFieldKind.Item: case QuestFieldKind.System:
                     s = Ref(d + "; the game's number, its name, or a key \"mod_id:id\""); break;
+                case QuestFieldKind.NpcShip:
+                    s = Str(d + ": battleship, carrier, vossk_battleship, freighter, pirate_boss, or a mod's NPC ship key \"mod_id:id\""); break;
                 case QuestFieldKind.Choice: case QuestFieldKind.Race:
                     s = Desc(new JObject { ["type"] = "string", ["enum"] = new JArray(f.values) }, d + ": " + string.Join(", ", f.values.Select((v, i) => (v.Length == 0 ? "\"\"" : v) + " = " + f.labels[i]))); break;
                 case QuestFieldKind.LongText: case QuestFieldKind.Text: s = Text(d); break;
@@ -203,7 +205,8 @@ namespace GoF2Remake.Events
                     ["title"] = Text("the title (story and bar missions need one)"),
                     ["kind"] = new JObject { ["type"] = "string", ["enum"] = new JArray("quest", "mission", "event"), ["default"] = "quest",
                                              ["description"] = "quest: a story mission, starts by itself when startsWhen holds; mission: a bar mission offered in the Space Lounges; event: started by /event or another's startevent step" },
-                    ["startsWhen"] = Str("a story mission's start: \"\" at once, \"never\" only by a startquest step, else a condition (visited(78), quest(other) == 2, campaign >= 20...)"),
+                    ["startsWhen"] = Str("a story mission's start: \"\" at once, \"never\" only by a startquest step, else a condition (visited(78), quest(other) == 2, campaign >= 20...); a bar mission (single player): no bar offers it until it holds"),
+                    ["once"] = new JObject { ["type"] = "boolean", ["description"] = "a bar mission (single player): once completed, no bar offers it again in this game (quest(name) then reads 2)" },
                     ["reward"] = new JObject { ["type"] = "integer", ["minimum"] = 0, ["description"] = "credits paid at complete" },
                     ["repeat"] = new JObject { ["type"] = "number", ["minimum"] = 0, ["description"] = "a story mission that comes again: this many minutes of playing time after it was done, as soon as its startsWhen holds then (add a chance to it, random(1, 300) == 1, for a random moment; 0 / left out: once)" },
                     ["offer"] = Text("a bar mission: what the visitor says"),

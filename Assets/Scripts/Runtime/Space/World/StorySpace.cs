@@ -29,7 +29,8 @@
 //                                   orbit, 127 -> Alioth's, 134 -> docked at Var Lupra, 144 -> Var Lupra's orbit again,
 //                                   155 -> the orbit the Void was entered from, 161 -> Maissa's orbit, 162 -> docked at
 //                                   Maissa; step 125's decoy scans (MGame::OnInitialize) in the freighter stations' orbits
-// The conversation is shown by the flight HUD (DialogueRequested); the game is paused meanwhile (Navigation.Paused).
+// The conversation is shown by the flight HUD (DialogueRequested); the game is paused meanwhile
+// (Navigation.Conversation; or runs on with the level held, Settings.PlayOnInConversations).
 
 using System;
 using System.Collections.Generic;
@@ -64,9 +65,13 @@ namespace GoF2Remake.World
             campaign = campaignLevel;
         }
 
+        // Remake co-op: a conversation the scene change cut off no longer holds the leader's level.
+        void OnDestroy() { if (DialogueOpen) SpaceHooks.CoopDialog?.Invoke(false); }
+
         void Update()
         {
             if (Session.FreePlay || level == null || DialogueRequested == null || DialogueOpen || level.Leaving) return;
+            if (level.Layout != null && level.Layout.interstellar) return;   // remake: no story between the systems
             levelMs += Time.deltaTime * 1000f;
             if (SuccessPending)
             {
@@ -80,7 +85,13 @@ namespace GoF2Remake.World
             }
             if (level.Health != null && level.Health.Dead)
             {
-                if (!failed && campaign != null) { failed = true; CountFailure(); }
+                if (!failed && campaign != null)
+                {
+                    failed = true;
+                    CountFailure();
+                    // Remake co-op: the leader's death fails the crew's mission (a guest's death respawns them, NetCoop).
+                    if (CoopCampaign.Leader && !campaign.Follower) CoopLeaderFailed();
+                }
                 return;
             }
             if (!level.StartSequenceOver) return;
@@ -185,8 +196,10 @@ namespace GoF2Remake.World
             // This level's orbit (Session.StationIndex already names the next one on the frame a ride / jump starts).
             var ctx = new StoryContext { docked = false, levelMs = levelMs, station = level.Layout.stationIndex };
             bool levelWon = campaign != null && Story.Index == campaign.BuiltIndex && campaign.Won;
-            if (Story.Mission.won || !(Story.IsComplete(level.Database, ctx) || levelWon)) return;
+            bool remote = CoopCampaign.RemoteWon;   // remake co-op: another crew member's game won it
+            if (Story.Mission.won || !(remote || Story.IsComplete(level.Database, ctx) || levelWon)) return;
             Story.Mission.won = true;
+            if (!remote) CoopCampaign.ReportWon(Story.Index);
             // MGame::successCheck, index 0x26: the remaining freighters get 9 999 999 hull.
             if (Story.Index == 38 && campaign != null)
                 foreach (var s in campaign.Ships) if (s != null && s.IsFreighter && s.Target.Alive) s.SetHull(9999999);
@@ -211,7 +224,14 @@ namespace GoF2Remake.World
         /// <summary>MGame::OnTouchEnd after a campaign success conversation in space.</summary>
         void AfterSuccess(int reward)
         {
-            Session.Credits += reward;
+            // Remake co-op: step 43 won by the crew while this player flies: the ending here too (docked it is the station's).
+            if (CoopCampaign.Active && Story.Index == 43)
+            {
+                Session.Credits += CoopCampaign.Share(reward);
+                level.PlayEnding();
+                return;
+            }
+            Session.Credits += CoopCampaign.Share(reward);   // remake co-op: shared out across the crew (its setting)
             int n = Story.Advance(level.Database);
             if (n == 15) { Session.StationIndex = 98; level.Dock(); }       // arrested: taken to Alioth
             else if (n == 22) level.Dock();                                       // back into Kappa's station
@@ -273,12 +293,64 @@ namespace GoF2Remake.World
             int index = Story.Index;
             string text = Localization.Get(392);
             if (index == 38 || index == 40 || index == 41) text += "\n" + Localization.Get(527);
+            if (CoopCampaign.Active)
+            {
+                // Remake co-op: no saves in a session; the crew starts the mission again from the station last docked at.
+                if (CoopCampaign.Leader) CoopLeaderFailed();
+                OpenText(text + "\n\n" + CoopFailText, 16, () => level.ReturnToLastDocked());
+                return;
+            }
             text += "\n\n" + Localization.Get(319);
             OpenText(text, 16, () => level.LoadLastSave());
         }
 
+        static string CoopFailText => Localization.Extra("coopFailBack", "The crew starts the mission again from the last station.");
+
+        /// <summary>Remake co-op, the leader: its level failed; the step goes back to its checkpoint and the crew hears it.</summary>
+        void CoopLeaderFailed()
+        {
+            CoopCampaign.LeaderFailed();
+            SpaceHooks.CoopLevelFailed?.Invoke(level.Layout.stationIndex);
+        }
+
+        /// <summary>Remake co-op, a guest in the leader's story orbit: the leader's level failed.</summary>
+        public void CoopFailed()
+        {
+            if (failed || level.Leaving) return;
+            failed = true;
+            string text = Localization.Get(392) + "\n\n" + CoopFailText;
+            if (MessageRequested == null) { level.ReturnToLastDocked(); return; }
+            OpenText(text, 16, () => level.ReturnToLastDocked());
+        }
+
+        /// <summary>Remake mods: the next mod DLC of a finished game (ModDlcs) is looked for this often in free flight.</summary>
+        const float DlcCheckMs = 10000f;
+        float dlcCheckMs;
+
+        /// <summary>Remake mods (ModDlcs): the game's own story is over (step 162): in free flight (no level mission, not mining,
+        /// no autopilot, single player) the next DLC not played yet begins like the add-ons' calls: its intro, then its quest.</summary>
+        void CheckDlcEntry()
+        {
+            if ((dlcCheckMs -= Time.deltaTime * 1000f) > 0f) return;
+            dlcCheckMs = DlcCheckMs;
+            if (NetSession.SessionGame || Story.IsLevelMission(Session.StationIndex) || level.FreelanceOrbit != null) return;
+            if (level.Mining != null && level.Mining.State != Flight.Mining.Phase.Idle) return;
+            if (level.Navigation != null && level.Navigation.Autopilot) return;
+            var next = Modding.ModDlcs.Next();
+            if (next == null) return;
+            void Begin()
+            {
+                string why = GameHooks.StartQuest?.Invoke(next.quest, true);
+                if (why != null) Debug.LogWarning($"StorySpace: the DLC {next.Id} couldn't start its quest {next.quest}: {why}");
+                else Debug.Log($"StorySpace: the DLC {next.Id} begins ({next.quest})");
+            }
+            if (!string.IsNullOrEmpty(next.Intro)) OpenText(next.Intro, next.introSpeaker, Begin);
+            else Begin();
+        }
+
         void CheckAddonEntry()
         {
+            if (Modding.ModDlcs.StoryFinished) { CheckDlcEntry(); return; }   // remake mods: the DLCs after the game's end
             int index = Story.Index;
             if (index != Story.GameWonIndex && index != Story.Dlc1WonIndex) return;
             if (Story.IsLevelMission(Session.StationIndex)) return;
@@ -289,7 +361,7 @@ namespace GoF2Remake.World
             Open(call.success, _ => { Story.Advance(level.Database); Story.Advance(level.Database); });
         }
 
-        /// <summary>A conversation from another level script (the Kaamo siege's calls), paused like the story's.</summary>
+        /// <summary>A conversation from another level script (the Kaamo siege's calls), held like the story's.</summary>
         public void ShowPages(List<DialoguePage> pages, Action<bool> after)
         {
             if (DialogueRequested == null) { after?.Invoke(false); return; }
@@ -299,11 +371,13 @@ namespace GoF2Remake.World
         void Open(List<DialoguePage> pages, Action<bool> after)
         {
             DialogueOpen = true;
-            if (level.Navigation != null) level.Navigation.Paused = true;
+            if (level.Navigation != null) level.Navigation.Conversation = true;
+            SpaceHooks.CoopDialog?.Invoke(true);   // remake co-op: the leader's story level holds meanwhile
             DialogueRequested?.Invoke(pages, skipped =>
             {
                 DialogueOpen = false;
-                if (level.Navigation != null) level.Navigation.Paused = false;
+                if (level.Navigation != null) level.Navigation.Conversation = false;
+                SpaceHooks.CoopDialog?.Invoke(false);
                 after?.Invoke(skipped);
             });
         }
@@ -314,11 +388,11 @@ namespace GoF2Remake.World
         void OpenText(string text, int speaker, Action after)
         {
             DialogueOpen = true;
-            if (level.Navigation != null) level.Navigation.Paused = true;
+            if (level.Navigation != null) level.Navigation.Conversation = true;
             MessageRequested?.Invoke(text, speaker, () =>
             {
                 DialogueOpen = false;
-                if (level.Navigation != null) level.Navigation.Paused = false;
+                if (level.Navigation != null) level.Navigation.Conversation = false;
                 after?.Invoke();
             });
         }

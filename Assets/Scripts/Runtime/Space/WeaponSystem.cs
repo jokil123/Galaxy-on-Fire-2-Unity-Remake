@@ -162,7 +162,12 @@ namespace GoF2Remake.Flight
         /// <summary>More than one secondary item is mounted (the HUD offers the switch).</summary>
         public bool CanCycleSecondary { get { int n = 0, last = -1; foreach (var r in rigs) if (r.gun.isSecondary && r.gun.itemIndex != last) { last = r.gun.itemIndex; n++; } return n > 1; } }
         /// <summary>No firing (the mining minigame blocks the guns, MGame::OnTouchBegin / OnTouchEnd).</summary>
-        public bool Blocked { get; set; }
+        public bool Blocked { get => blocked || WarpHeld; set => blocked = value; }
+        bool blocked;
+        /// <summary>Blocked as set, without the warp's hold: what a caller that puts the block back as it found it reads.</summary>
+        public bool BlockSet => blocked;
+        /// <summary>Remake: no firing in the warp (SpaceLevel.WarpHolds), apart from Blocked, which the menus clear.</summary>
+        public bool WarpHeld { get; set; }
         /// <summary>The primary guns stay silent, the secondaries fire (the approach to an asteroid and the landing: the fire
         /// button aborts instead, Mining; missiles still go, MGame::OnTouchEnd).</summary>
         public bool PrimaryBlocked { get; set; }
@@ -235,24 +240,30 @@ namespace GoF2Remake.Flight
             // EventI::getPitch). The Nirai Overdrive (+20 % fire rate) raises the primaries' shots by 0.8 octaves; the
             // Overcharge (-10 %) gives a negative value the original skips: no change (#76).
             primaryPitch = 1f - fireRate > 0f ? Mathf.Pow(2f, 4f * (1f - fireRate)) : 1f;
-            int p = 0, s = 0;
+            // Level::createPlayer: each gun on the mount of its slot (Gun::setOffset(mounts[Ship::getSlotPos])), an empty slot
+            // between two weapons leaving its mount empty (Hangar.MountOrder).
+            var primaryOrder = Hangar.MountOrder(db, equipment, 0);
+            var secondaryOrder = Hangar.MountOrder(db, equipment, 1);
             // Remake mods (ModHardpoints): a mount showing a kit's weapon model fires from that model's muzzle.
             var primaryItems = Modding.ModHardpoints.WeaponItems(db, equipment, false);
             var secondaryItems = Modding.ModHardpoints.WeaponItems(db, equipment, true);
-            for (int e = 0; e < equipment.Count; e++)
+            // In slot order, like the original's walk over Ship+0x6c (the secondaries' selection order too).
+            var guns = new List<(int e, int slot)>();
+            for (int n = 0; n < primaryOrder.Count; n++) if (primaryOrder[n] >= 0) guns.Add((primaryOrder[n], n));
+            for (int n = 0; n < secondaryOrder.Count; n++) if (secondaryOrder[n] >= 0) guns.Add((secondaryOrder[n], n));
+            foreach (var (e, slot) in guns)
             {
                 var item = db.Item(equipment[e].item);
                 if (item == null) continue;
                 bool secondary = item.type == "secondary";
                 if (item.type != "primary" && !secondary) continue;
                 var mounts = secondary ? secondaryMounts : primaryMounts;
-                int slot = secondary ? s++ : p++;
                 // Remake: more weapons than the model has mounts (a mod's or a Kaamo upgrade's extra slots) reuse the mounts in
                 // turn, the ship's centre without any; they were skipped, so an extra secondary could be neither selected nor fired.
                 var at = mounts.Count > 0 ? MountToLocal(mounts[slot % mounts.Count]) : Vector3.zero;
                 if (mounts.Count > 0)
                 {
-                    var shown = (secondary ? secondaryItems : primaryItems)[slot % mounts.Count];   // the mount's model is its first weapon's
+                    var shown = (secondary ? secondaryItems : primaryItems)[slot % mounts.Count] ?? item;   // the mount's model is its first weapon's
                     at += Modding.ModHardpoints.MuzzleOffset(shipIndex, shown, secondary, mounts[slot % mounts.Count]);
                 }
                 var gun = new Gun(item, at, secondary);

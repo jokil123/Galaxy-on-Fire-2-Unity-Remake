@@ -202,6 +202,14 @@ namespace GoF2Remake.UI
         bool CheckStory()
         {
             if (level == null || level.Station == null || Session.FreePlay) return false;
+            // Remake co-op: the story caught up with the leader's (a loaner given or the own ship back): the turntable and
+            // the menu's story locks follow.
+            if (coopCatchUp != CoopCampaign.CatchUpSerial)
+            {
+                coopCatchUp = CoopCampaign.CatchUpSerial;
+                if (level.ShownShip != Session.ShipIndex) level.ReplacePlayerShip(Session.ShipIndex);
+                ApplyStoryLocks();
+            }
             var ctx = new StoryContext
             {
                 docked = true,
@@ -209,8 +217,10 @@ namespace GoF2Remake.UI
                 station = level.Station.index,
             };
             if (ctx.inLounge && SpecialLounge(ctx.station)) return true;
-            if (!Story.IsComplete(level.Database, ctx)) return false;
+            bool remote = CoopCampaign.RemoteWon;   // remake co-op: another crew member's game won the step
+            if (!remote && !Story.IsComplete(level.Database, ctx)) return false;
             Story.Mission.won = true;
+            if (!remote) CoopCampaign.ReportWon(Story.Index);
             CloseHangar();
             if (root.focusController?.focusedElement is VisualElement f) f.Blur();
             var step = Story.Step;
@@ -245,6 +255,7 @@ namespace GoF2Remake.UI
             if (Story.Index != 148) return false;
             if (station == 96)
             {
+                CoopCampaign.OnIndexSet(148);   // remake co-op: the leader follows
                 Session.CampaignMission = 151;
                 Session.StoryMission = StoryMission.From(StoryTable.Step(151));
                 return false;   // the normal path: 151 (lounge at Kalun Amir) is complete right here
@@ -263,12 +274,22 @@ namespace GoF2Remake.UI
         {
             var db = level.Database;
             int reward = Story.Mission.reward;
+            // Remake co-op: the ending too, in the session (the main menu scene loads without leaving it; the credits'
+            // end brings this player back here for Keith's epilogue, 44).
+            if (Story.Index == 43 && CoopCampaign.Active)
+            {
+                Session.Credits += CoopCampaign.Share(reward);
+                Session.EndingPending = true;
+                if (Application.CanStreamedLevelBeLoaded(menuScene)) SceneManager.LoadScene(menuScene);
+                return;
+            }
             if (Story.Index == 43)
             {
                 // ModStation::OnTouchEnd: index 43 starts the ending (the credits over the space backdrop, EndingCredits in the
                 // main menu scene); nextCampaignMission (-> 44) and the station module follow when it is over.
                 Session.Credits += reward;
                 Session.EndingPending = true;
+                Speedrun.Reached(SpeedrunRoute.MainEndingStep);   // remake: the ending ends a main game speedrun
                 BackToMenu();
                 return;
             }
@@ -299,7 +320,7 @@ namespace GoF2Remake.UI
                 SceneManager.LoadScene(level.spaceScene);
                 return;
             }
-            Session.Credits += reward;
+            Session.Credits += CoopCampaign.Share(reward);   // remake co-op: shared out across the crew (its setting)
             Session.Autosave();
             ApplyStoryLocks();
             Select(launchButton);
@@ -384,6 +405,9 @@ namespace GoF2Remake.UI
             int race = sys != null ? sys.raceId : -1;
             if (st == 100 || st == 101 || st == 108 || level.Station.system == 25 || race < 0 || race > 3 || PirateBases.StationHasBase(st)) return false;
             if (!Session.FreePlay && Session.CampaignMission == 0x30) return false;
+            // Remake, multiplayer (players' feedback 2026-10-22): a station the pilot's own faction holds never fines them;
+            // its fighters already count them as friends (NpcShip.TerritoryToLocal).
+            if (GoF2Remake.Multiplayer.NetFactionsClient.LocalHolds(st)) return false;
             bool enemy = GoF2Remake.Flight.Standing.IsEnemy(race);
             bool attacked = Session.AttackedStations.Contains(st);
             if (!enemy && !attacked) return false;

@@ -17,14 +17,14 @@ This file holds only what every task needs. Everything about one area of the gam
 | [assembled-prefabs.md](docs/notes/assembled-prefabs.md) | Assembled objects, ship variants, LODs and the generated levels of detail |
 | [space-scene.md](docs/notes/space-scene.md) | Orbit layout, sky, reflections, hull shader, backdrop, lights, menu background, docking, wormhole, the Void |
 | [navigation.md](docs/notes/navigation.md) | Locks, autopilot, autopilot / quick menus, planet jump, fast-forward and cruise |
-| [star-map.md](docs/notes/star-map.md) | Star map, jumpgates, Khador Drive, arrivals, mission maps, Loma |
+| [star-map.md](docs/notes/star-map.md) | Star map, jumpgates, Khador Drive, arrivals, mission maps, Loma, interstellar space |
 | [npcs-and-combat.md](docs/notes/npcs-and-combat.md) | Traffic, NPC stats and AI, damage, radar and HUD markers, music, collisions, radio, fines, NPC guns and turrets, missile warning, cargo stealing |
 | [capital-ships-and-pirates.md](docs/notes/capital-ships-and-pirates.md) | Capital ships, their enhancements, fleet battles and missiles, pirate bases, pirate events, threat tiers, the pirate board |
 | [story.md](docs/notes/story.md) | Campaign rules, dialogue, radio, cutscenes, the main and Valkyrie levels, the ending |
 | [supernova.md](docs/notes/supernova.md) | Steps 84-162, object docking, hacking, gas clouds, Most Wanted, Specters, the Supernova Challenge |
 | [bar-and-freelance.md](docs/notes/bar-and-freelance.md) | Agents, lounge chat, freelance missions, Missions window, blueprints, wingmen, medals |
 | [kaamo-club.md](docs/notes/kaamo-club.md) | The siege, purchase, storage and stored hulls |
-| [mining.md](docs/notes/mining.md) | Asteroids, the lock, approach, minigame, payout, the mining beam |
+| [mining.md](docs/notes/mining.md) | Asteroids, the lock, approach, minigame, payout, the mining beam, the Mining Plant and its waste sorting |
 | [station-scene.md](docs/notes/station-scene.md) | Hangar, lounge, station menu, Inspect ship, hangar flights, parking heights, ship shadows, the remodelled hangars |
 | [shop.md](docs/notes/shop.md) | Economies, prices, stock, cargo, mounting, ships, held trades, item details |
 | [weapons.md](docs/notes/weapons.md) | Guns, special weapons, turrets, homing, smoke trails, explosions, pooling |
@@ -33,6 +33,7 @@ This file holds only what every task needs. Everything about one area of the gam
 | [ui.md](docs/notes/ui.md) | UI Toolkit, the design document, scaling, accessibility, aspect ratios |
 | [input.md](docs/notes/input.md) | Keyboard, key bindings, controllers, input modes, pause menu, Action Freeze and photo tools, touch controls, hints, cameras, cockpit view, gyro, haptics, mouse steering |
 | [free-flight.md](docs/notes/free-flight.md) | The EVERSPACE 2-style flight option and its key layout |
+| [speedrun.md](docs/notes/speedrun.md) | The speedrun timer, splits, routes, the runs folder (.lss), comparisons, the LiveSplit link |
 | [saves.md](docs/notes/saves.md) | Difficulty, save slots, original-game saves, deleting, export / import, save folder, Hardcore, New Game+ |
 | [options.md](docs/notes/options.md) | Text tables and languages, the story step label, every option, bloom, frame rate, graphics presets, texture quality, upscalers |
 | [platforms.md](docs/notes/platforms.md) | Discord, app icon, Android, iOS, UWP, Vulkan pre-transform, version, update check, hitch logger |
@@ -42,9 +43,10 @@ This file holds only what every task needs. Everything about one area of the gam
 | [multiplayer-server.md](docs/notes/multiplayer-server.md) | Dedicated server, settings, moderation, profiles, persistent host, MOTD, news, web admin, server checks |
 | [multiplayer-factions.md](docs/notes/multiplayer-factions.md) | Factions, bank, claims, sieges, garrisons, tolls, VAT |
 | [multiplayer-social.md](docs/notes/multiplayer-social.md) | Squads, squad bar missions, arena matches, trades, distress calls |
+| [multiplayer-coop.md](docs/notes/multiplayer-coop.md) | The co-op campaign: hosting, the leader's story, catch-up, crew wins, story orbit followers, holds, failures |
 | [chat-and-commands.md](docs/notes/chat-and-commands.md) | Chat, chat commands, admin tools, selectors |
 | [event-graphs.md](docs/notes/event-graphs.md) | Events, event graph files and nodes, quests, bar missions, cutscenes, ship orders, wormholes |
-| [mods.md](docs/notes/mods.md) | Mod format, items, ships, numbers, saves, campaigns, options, flight styles, conditions, traffic, capital ships, mobile stations, ES2 docking, blueprints, browser, multiplayer |
+| [mods.md](docs/notes/mods.md) | Mod format, items, ships, numbers, saves, campaigns, options, flight styles, conditions, traffic, capital ships, NPC ships, mobile stations, ES2 docking, blueprints, browser, multiplayer |
 | [mods-models.md](docs/notes/mods-models.md) | Ship models, how a ship is seen, engine effects, exhaust styles, textures / skins, image formats, loading |
 | [mods-ship-kits.md](docs/notes/mods-ship-kits.md) | Ship kits, builds, colours, skins, hardpoint models, engine flames, lateral thrusters, liveries, decals, engine trails |
 | [mods-world.md](docs/notes/mods-world.md) | Systems, stations, station models, planets, suns, skies, interiors, characters, mod races |
@@ -194,6 +196,9 @@ The full list with what each item makes and writes: [docs/notes/editor-tools.md]
 - `weapons_hd` (gun mounts per ship: slotType 0 primary, 1 secondary, 2 turret, 3 = engine exhaust points, not turrets), `docks_hd` (docking points), `shipparts` / `stationparts`, collision tables, DLC variants `sn_*` / `v_*`.
 - `economy_default.json`: the Default Economy overlay on `items` / `item_attributes` / `ships` (see "Shop").
 - `resources.json`: the original resource table. `meshes[]` (id, model path, materialId), `materials[]` (shading type, textures), `textures[]`. IDs match the decompiled code; most main-game ship meshes are 17000 + ship index (a few special ships differ, so look them up by model path).
+- **New base game content goes in `Resources/GoF2Base`, never in the tables above** (a mod's layout, always on,
+  `ModManager.BaseContent`, id `gof2`, an item's key `gof2:<id>`; see "Base content" in docs/notes/mods.md). The original tables
+  stay 0..N-1 exactly as they are: every number after them belongs to `ModRegistry`, and differs per player.
 - Text IDs (`Localization/text_en.json`):
   - ship name = 913 + index, ship description = 977 + index
   - item name = 1274 + index, item description = 1041 + index

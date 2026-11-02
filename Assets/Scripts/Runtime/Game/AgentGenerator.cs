@@ -124,8 +124,9 @@ namespace GoF2Remake.Data
             if (station != 108) n = R(2) + story.Count + 3 < 5 ? story.Count + 3 + R(2) : 5;
 
             foreach (var s in story) agents.Add(StoryAgent(db, s));
-            // Campaign 23 at station 10: an extra agent sells the AB-1 Retractor (item 68) for 100 000.
-            if (campaign == 23 && station == 10)
+            // Campaign 23 at station 10: an extra agent sells the AB-1 Retractor (item 68) for 100 000 (the Android build; the iOS
+            // build, the Default economy, puts a 40 % AB-1 in every shop during steps 17..24 instead, Shop.GenerateItems).
+            if (campaign == 23 && station == 10 && Session.Economy == Economy.Android)
                 agents.Add(new Agent { name = RandomName(0, true), race = 0, station = station, offer = AgentOffer.SellItem,
                                            portrait = CreatePortrait(true, 0), sellItem = 68, sellQuantity = 1, sellPrice = 100000 });
 
@@ -154,8 +155,8 @@ namespace GoF2Remake.Data
                 }
             AddModRaceDiplomats(db, station, agents);
 
-            // Campaign 23 at station 10, or 1 %: the first mission under 50 000 pays 10x (max 50 000).
-            if ((campaign == 23 && station == 10) || R(100) == 1)
+            // Campaign 23 at station 10, or 1 %: the first mission under 50 000 pays 10x (max 50 000); the Android build only.
+            if (Session.Economy == Economy.Android && ((campaign == 23 && station == 10) || R(100) == 1))
             {
                 var a = agents.Find(x => x.offer == AgentOffer.Mission && x.HasMission && x.mission.reward < 50000);
                 if (a != null) a.mission.reward = Math.Min(a.mission.reward * 10, 50000);
@@ -237,21 +238,35 @@ namespace GoF2Remake.Data
             foreach (var d in Modding.ModBlueprints.Offerable(b => b.loungeChance > 0f))
             {
                 if (!Modding.ModBlueprints.LoungeAllowedAt(d, station, systemRace)) continue;
-                if (Rng.NextDouble() * 100.0 >= d.loungeChance) continue;
-                if (agents.Exists(a => a.offer == AgentOffer.SellBlueprint && a.sellBlueprint == d.product)) continue;
-                int race = systemRace >= 0 && systemRace <= 3 ? systemRace : 0;
-                bool male = race == 0 ? R(100) < 60 : true;
-                int price = d.loungePrice > 0 ? d.loungePrice : Math.Max(1000, (db.Item(d.product)?.maxPrice ?? 0) / 2);
-                var seller = new Agent
-                {
-                    name = RandomName(race, male), race = race, male = male, station = station, offer = AgentOffer.SellBlueprint,
-                    portrait = CreatePortrait(male, race), sellBlueprint = d.product, sellPrice = price,
-                };
-                int i = agents.FindLastIndex(x => !x.IsStory && x.offer != AgentOffer.Diplomat && x.offer != AgentOffer.Wingmen
-                                                  && x.offer != AgentOffer.SellShip && x.offer != AgentOffer.SellBlueprint);
-                if (agents.Count >= 5 && i >= 0) agents[i] = seller;
-                else if (agents.Count < 5) agents.Add(seller);
+                if (Rng.NextDouble() * 100.0 < d.loungeChance) PlaceModSeller(db, d, station, systemRace, agents);
             }
+        }
+
+        /// <summary>Remake mods: a named seller ("seller", at fixed stations) whose blueprint came on offer while this bar's
+        /// visitors were kept (Shop.EnterStation: a station among the last 3 keeps them).</summary>
+        public static void AddNamedSellers(Database db, int station, List<Agent> agents)
+        {
+            if (station == 108 || station == 101 || Shop.InSupernovaSystem(SystemOf(db, station), station)) return;
+            foreach (var d in Modding.ModBlueprints.Offerable(b => b.seller != null && b.loungeChance > 0f && b.loungeStations.Contains(station)))
+                PlaceModSeller(db, d, station, Sys(db, SystemOf(db, station))?.raceId ?? -1, agents);
+        }
+
+        static void PlaceModSeller(Database db, Modding.ModBlueprints.Def d, int station, int systemRace, List<Agent> agents)
+        {
+            if (agents.Exists(a => a.offer == AgentOffer.SellBlueprint && a.sellBlueprint == d.product)) return;
+            var who = d.seller;
+            int race = who != null ? who.race : systemRace >= 0 && systemRace <= 3 ? systemRace : 0;
+            bool male = who != null || (race == 0 ? R(100) < 60 : true);
+            int price = d.loungePrice > 0 ? d.loungePrice : Math.Max(1000, (db.Item(d.product)?.maxPrice ?? 0) / 2);
+            var seller = new Agent
+            {
+                name = who?.name ?? RandomName(race, male), race = race, male = male, station = station, offer = AgentOffer.SellBlueprint,
+                portrait = (who != null ? StoryTable.Portrait(who.speaker) : null) ?? CreatePortrait(male, race), sellBlueprint = d.product, sellPrice = price,
+            };
+            int i = agents.FindLastIndex(x => !x.IsStory && x.offer != AgentOffer.Diplomat && x.offer != AgentOffer.Wingmen
+                                              && x.offer != AgentOffer.SellShip && x.offer != AgentOffer.SellBlueprint);
+            if (agents.Count >= 5 && i >= 0) agents[i] = seller;
+            else if (agents.Count < 5) agents.Add(seller);
         }
 
         /// <summary>SpaceLounge::startChat, diplomat: int(|standing axis| / 100 * 16000) (a mod race: its own standing).</summary>

@@ -29,8 +29,31 @@ namespace GoF2Remake.World
 
         public static void SetupSky(OrbitLayout layout, float ambientIntensity = 1f, int nebulaOverride = -1)
         {
+            var sky = MakeSky(layout, nebulaOverride);
+            if (sky == null) return;
+            RenderSettings.skybox = sky;
+            RenderSettings.ambientMode = AmbientMode.Skybox;
+            RenderSettings.ambientIntensity = ambientIntensity;
+            RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
+            SkyReflection.Update();   // the ambient light
+            SkyReflection.SetSystem(layout);   // the hulls' reflection: the system's cubemap (ChangeCubeTexture)
+
+            GoF2Remake.World.SpaceHooks.SceneFog(layout.fog);   // off below Quality High
+            if (layout.fog)
+            {
+                RenderSettings.fogMode = FogMode.Linear;
+                RenderSettings.fogStartDistance = 0f;
+                RenderSettings.fogEndDistance = layout.fogEnd * M;
+                RenderSettings.fogColor = layout.fogColor;
+            }
+        }
+
+        /// <summary>The orbit's sky as a material, set nowhere (InterstellarField blends a system's in on approach); null without
+        /// the baked skies.</summary>
+        public static Material MakeSky(OrbitLayout layout, int nebulaOverride = -1)
+        {
             var template = Resources.Load<Material>("GoF2Sky/SpaceSky");
-            if (template == null) { Debug.LogWarning("OrbitBuilder: run GoF2 > Build > Space Skies"); return; }
+            if (template == null) { Debug.LogWarning("OrbitBuilder: run GoF2 > Build > Space Skies"); return null; }
             var sky = new Material(template) { name = "SpaceSky (runtime)" };
             int stars = layout.systemIndex >= 0 ? layout.systemIndex % 3 : 2;   // alien/void: stars_002
             sky.SetTexture("_Stars", Resources.Load<Cubemap>($"GoF2Sky/stars_{stars:000}"));
@@ -52,21 +75,7 @@ namespace GoF2Remake.World
             }
             // The shader maps world directions into the baked cube: the inverse of the sky's Unity rotation.
             sky.SetMatrix("_SkyRotation", Matrix4x4.Rotate(Quaternion.Inverse(rotation)));
-            RenderSettings.skybox = sky;
-            RenderSettings.ambientMode = AmbientMode.Skybox;
-            RenderSettings.ambientIntensity = ambientIntensity;
-            RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
-            SkyReflection.Update();   // the ambient light
-            SkyReflection.SetSystem(layout);   // the hulls' reflection: the system's cubemap (ChangeCubeTexture)
-
-            GoF2Remake.World.SpaceHooks.SceneFog(layout.fog);   // off below Quality High
-            if (layout.fog)
-            {
-                RenderSettings.fogMode = FogMode.Linear;
-                RenderSettings.fogStartDistance = 0f;
-                RenderSettings.fogEndDistance = layout.fogEnd * M;
-                RenderSettings.fogColor = layout.fogColor;
-            }
+            return sky;
         }
 
         /// <summary>A mod's sky image on a GoF2/SpaceSky layer: 2:1 = a panorama, 6:1 = a strip of cube faces (else a warning
@@ -132,6 +141,13 @@ namespace GoF2Remake.World
             if (gammaSun && sun != null)
             {
                 Color c = layout.SunLightColor, lin = sun.color.linear * sun.intensity;
+                // Modified: the sun table's own hue blended in by SunTint: clamped at 2 a red sun's LIGHT0 is nearly white
+                // (Magnetar, system 5: 2 / 1.95 / 1.65), while the original's Dis is lit a faint red (measured on its screenshots:
+                // red over green 1.5 in the half tones, 1.2 here; 30 % of (1, 0.34, 0.29) gives 2 / 1.56 / 1.30, tuned by eye).
+                var raw = layout.sunColor;
+                float rawMax = Mathf.Max(raw.r, Mathf.Max(raw.g, raw.b), 1e-4f);
+                c = new Color(c.r * Mathf.Lerp(1f, raw.r / rawMax, SunTint), c.g * Mathf.Lerp(1f, raw.g / rawMax, SunTint),
+                              c.b * Mathf.Lerp(1f, raw.b / rawMax, SunTint));
                 static float Ratio(float gamma, float linear) => linear > 1e-4f ? gamma / linear : 0f;
                 SetSunGamma(new Vector3(Ratio(c.r, lin.r), Ratio(c.g, lin.g), Ratio(c.b, lin.b)));
             }
@@ -152,9 +168,11 @@ namespace GoF2Remake.World
 
         /// <summary>Modified: the sunlit side's HDR glow (_GoF2SunGlow), for the bloom; matched by eye to the original's
         /// screenshots (Kaamo).</summary>
-        const float SunGlow = 1.1f;
+        const float SunGlow = 1.3f;
         /// <summary>Modified: the brightness (gamma, texture x LIGHT0) where that glow starts.</summary>
-        const float SunGlowFrom = 0.35f;
+        const float SunGlowFrom = 0.4f;
+        /// <summary>Modified: how much of the sun table's hue tints the sunlit side (0 = LIGHT0 as clamped).</summary>
+        const float SunTint = 0.30f;
 
         /// <summary>Modified: StarSystem::initLight's LightSetGlobalSceneColorAmbient, kA x the sun colour (gamma): kA 0.15, 0.7
         /// in the supernova system (texture 15) but at mission 89 and from 158, where the sun colour is halved first.</summary>
@@ -389,6 +407,17 @@ namespace GoF2Remake.World
         public static Transform SpawnAsteroids(Database db, OrbitLayout layout, Transform parent = null, Func<Vector3, bool> reject = null)
             => SpawnField(db, layout, layout.asteroidCentre, layout.asteroidCount, -1, layout.asteroidSpread * 0.6f, layout.asteroidSpread, -1, parent, reject, "Asteroids");
 
+        /// <summary>The same field for the same seed (SystemApproach shows it before the orbit exists); the game's random
+        /// stream goes on as it was.</summary>
+        public static Transform SpawnAsteroids(Database db, OrbitLayout layout, int seed, Transform parent)
+        {
+            var state = Random.state;
+            Random.InitState(seed);
+            var field = SpawnAsteroids(db, layout, parent);
+            Random.state = state;
+            return field;
+        }
+
         /// <summary>
         /// A field of 'count' asteroids around 'centre' (game units) of the orbit's kind: the first 'big' (-1 = roll 2..9
         /// like Level::createAsteroids) big in a cube of 'bigSide', the rest small in 'smallSide'. 'ore' >= 0 gives every
@@ -505,16 +534,19 @@ namespace GoF2Remake.World
             return false;
         }
 
-        /// <summary>SET_STARS + SET_FOG around the camera (Level::initParticleSystems 0xcc990).</summary>
-        public static void SpawnDust(OrbitLayout layout, Transform parent = null)
+        /// <summary>SET_STARS + SET_FOG around the camera (Level::initParticleSystems 0xcc990). Returns the fog; the space between
+        /// the systems has none, nothing but distance there.</summary>
+        public static SpaceDust SpawnDust(OrbitLayout layout, Transform parent = null)
         {
             var stars = new GameObject("SpaceDust").AddComponent<SpaceDust>();
             stars.transform.SetParent(parent, false);
             stars.Build(Resources.Load<Material>($"{Backdrop.MaterialFolder}/space_particle"), 500, 20f, 60f, Color.white, 10000f, 5000f, 2000f);
+            if (layout.interstellar) return null;
             var fog = new GameObject("SpaceFog").AddComponent<SpaceDust>();
             fog.transform.SetParent(parent, false);
             string fogTex = layout.systemTexture == 12 ? "v_fog_ice" : "fog";
             fog.Build(Resources.Load<Material>($"{Backdrop.MaterialFolder}/{fogTex}"), 15, 10000f, 10000f, layout.dustFogTint, 10000f, 5000f, 1000f);
+            return fog;
         }
 
         public static Backdrop SpawnBackdrop(OrbitLayout layout, Camera camera, Transform parent = null)

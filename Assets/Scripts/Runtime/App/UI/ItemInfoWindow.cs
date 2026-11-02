@@ -18,12 +18,13 @@ using GoF2Remake.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using GoF2Remake.Flight;
 
 namespace GoF2Remake.UI
 {
     public class ItemInfoWindow
     {
-        const float FrameMs = 1000f / 30f;
+        const float FrameMs = OriginalFrame.Ms;
         static readonly Vector3 StagePosition = new Vector3(0f, -20000f, 0f);
 
         readonly StationMenu menu;
@@ -157,7 +158,7 @@ namespace GoF2Remake.UI
             Begin();
             preview.Hide();
             icon.style.backgroundImage = new StyleBackground(ItemInfo.ItemIcon(item));
-            nameLabel.text = ItemInfo.ItemName(item);
+            nameLabel.text = ItemInfo.TaggedItemName(item);
             subLabel.text = $"{ItemInfo.Category(it)}  ·  {T(133)} {it.techLevel}";
             foreach (var (label, value) in ItemInfo.ItemStats(it)) Row(label, value);
             if (showPrice && price > 0) Row(T(132), ItemInfo.Credits(price));
@@ -171,7 +172,7 @@ namespace GoF2Remake.UI
             if (s == null) return;
             Begin();
             icon.style.backgroundImage = new StyleBackground(ItemInfo.ShipIcon(ship));
-            nameLabel.text = ItemInfo.ShipName(ship);
+            nameLabel.text = ItemInfo.TaggedShipName(ship);
             subLabel.text = ItemInfo.ShipRaceText(ship);
             var cur = Modding.ModShipKits.Effective(db.Ship(Session.ShipIndex));   // a customizable ship: as its build makes it
             s = Modding.ModShipKits.Effective(s);

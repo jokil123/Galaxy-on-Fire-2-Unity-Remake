@@ -41,6 +41,8 @@ namespace GoF2Remake.World
         public bool stationObject;
         /// <summary>Status::inAlienOrbit: the Void's home orbit (Session.VoidOrbit): Void station, sky 010, Void asteroids.</summary>
         public bool alienOrbit;
+        /// <summary>Remake: the space between the systems, not this orbit (InterstellarSpace.Clear).</summary>
+        public bool interstellar;
         /// <summary>Status::inPlanetRingOrbit (stations 120 / 126 / 130 / 132): the orbit planet has no camera zoom.</summary>
         public bool ringOrbit;
 
@@ -441,6 +443,35 @@ namespace GoF2Remake.World
 
         /// <summary>Game position to Unity: (x, y, -z) * 0.05.</summary>
         public static Vector3 ToUnity(Vector3 game) => new Vector3(game.x, game.y, -game.z) * MetersPerUnit;
+
+        /// <summary>Where a jump in puts the ship, and the way it faces: the station. 'previousStation': the one it came from.</summary>
+        public void ArrivalPose(int previousStation, out Vector3 position, out Quaternion facing)
+        {
+            position = ArrivalPoint(previousStation);
+            facing = Quaternion.LookRotation(-position.normalized, Vector3.up);
+            // Level::init: arriving in Loma's black market (system 25) puts the player 40 000 further along game +z.
+            if (systemIndex == 25) position += ToUnity(new Vector3(0f, 0f, 40000f));
+        }
+
+        /// <summary>Remake: an arrival by cruise to this orbit's planet (Navigation.RunPlanet): as far out as any, on the near side
+        /// of the station, facing the planet the ship was flying at.</summary>
+        public void PlanetArrivalPose(int previousStation, out Vector3 position, out Quaternion facing)
+        {
+            var own = planets.Find(p => p.isOrbitPlanet);
+            if (own == null || arrival.HasValue) { ArrivalPose(previousStation, out position, out facing); return; }
+            var way = DirToUnity(-Direction(own.pitch, own.yaw));
+            position = -way * (4f * BackdropDistance * MetersPerUnit);
+            facing = Quaternion.LookRotation(way, Vector3.up);
+        }
+
+        Vector3 ArrivalPoint(int previousStation)
+        {
+            if (arrival.HasValue) return ToUnity(arrival.Value);   // remake mods: the orbit's own
+            if (hasJumpgate || alienOrbit) return ToUnity(hiddenJumpgate);
+            var from = planets.Find(p => p.station == previousStation);
+            if (from == null) return ToUnity(new Vector3(0f, 0f, 100000f));
+            return ToUnity(-4f * BackdropDistance * Direction(from.pitch, from.yaw));
+        }
 
         /// <summary>Game direction to Unity (unscaled).</summary>
         public static Vector3 DirToUnity(Vector3 game) => new Vector3(game.x, game.y, -game.z);

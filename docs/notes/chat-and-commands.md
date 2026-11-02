@@ -66,7 +66,7 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   the sender; the dedicated server's console runs the very same table (`NetCommands.RunOnServer` with no issuer: every
   right, named "Server"; `list` = players, `say` = g). Only what changes or reads this game stays local: `/help` (the
   commands this player can run, `available`), `/netstats`, `/pos` (the orbit and the game coordinates /tp takes), `/sos`
-  and `/assist` (`NetDistress`). The arena (`/duel` ..., `/leave` leaves a queue or match before the squad), profile
+  and `/assist` (`NetDistress`), `/follow` (`NetFollow`). The arena (`/duel` ..., `/leave` leaves a queue or match before the squad), profile
   (`/link` ...), faction (`/faction`, `/c`) and moderation commands are rows of the same table calling their own
   handlers; the station window's buttons send them as chat lines, which `SendChatRpc` runs through
   `NetCommands.RunOnServer`. Server
@@ -84,12 +84,14 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   order and sends it to each target's own game, `NetState.AdminRpc`, server-only; in the chat the players may be left out
   = yourself): `/kill [players]` (in space, through god mode, "X was destroyed by Y" for everyone), `/heal [players]`
   (`Cheats.Repair`), `/give [players] <item> [amount] [mount]` (an item's number or name, 1..1000; "mount" docked:
-  `Cheats.GiveAndMount`), `/credits [players] <amount>` (negative takes, never below 0), `/standing [players] <race> <amount> [set]`
+  `Cheats.GiveAndMount`), `/take [players] <item> [amount | all] [mounted]` (remake, 2026-11-02: a hand-in, see
+  event-graphs.md "Hand-ins"), `/credits [players] <amount>` (negative takes, never below 0), `/standing [players] <race> <amount> [set]`
   (remake, 2026-10-28, `NetAdminStanding`: the standing toward a game race 0-3 (its axis, `Standing.Move`) or a mod's
   race (`ModRaces.SetStanding`; it travels by key in the order's text: numbers can differ between games) moved by the
   amount or set to it, -100..100, no Extreme doubling; pirates, the Void, Specters and a hostile mod race refused; the
   event graphs' Standing node and the quests' Standing step write it), `/spawn [players] <ship | object>
-  [race] [count] [enemy | friendly | neutral | standing] [turrets <item,item>] [at x y z]` (`DebugSpawner`: a ship's number or name as that game's
+  [race] [count] [enemy | friendly | neutral | standing] [turrets <item,item>] [hull <x>] [guns <x>] [at x y z]` or `/spawn type <npc type>`
+  (remake 2026-11-02: hull / guns factors and NPC ship types, see event-graphs.md "Stronger spawns") (`DebugSpawner`: a ship's number or name as that game's
   traffic, the race (a mod's race too, `Standing.RaceWord`) by default its maker's else pirates, 1..10 side by side, enemy by default; "turrets": turret items on the
   ships' turret mounts, `NpcMountedTurrets`, carried in the order's text after '~'; neutral = the remake's
   `SpawnSpec.alwaysNeutral` / `NpcShip.alwaysNeutral`, neither side whatever the standings until turned or shot, also toward
@@ -100,8 +102,9 @@ Notes moved from `CLAUDE.md` (its index lists every notes file). Code comments c
   (`Navigation.Kind.Marker` on the model's centre: bracket, name and distance near the crosshair like a landmark, never a
   lock candidate; local to that player's game); the event graph's Spawn node has a Name port for it, empty = none, old
   graphs without the port compile as before), `/ship [players] <ship | own>` (`PlayerHull.Fly` / `Restore`: any
-  hull of the debug Ships tab, docked only ownable ones), `/ammo`, `/reveal`, `/peace [players]`, `/cheat [players] <god | ammo |
-  cooldown | primary | boost | onehit | locks | shopping | jumps> [on | off]` (`Cheats.Grant`: that player's flag for the session, not
+  hull of the debug Ships tab, docked only ownable ones), `/lend [players] <ship> [keep] | back` (remake mods, 2026-11-02:
+  an event's loaner, the own ship parked, given back when the graph ends; docs/notes/mods.md), `/ammo`, `/reveal`, `/peace [players]`, `/cheat [players] <god | ammo |
+  cooldown | primary | equipment | onehit | locks | shopping | jumps> [on | off]` (`Cheats.Grant`: that player's flag for the session, not
   saved, whatever the session allows), `/mute <players> [minutes]` / `/unmute` (the server drops their chat and whispers;
   never the host's player, only the host / console mutes an admin), `/title [players] <text> [| subtitle] [for <seconds>]`
   ("clear") and `/timer [players] <seconds | m:ss> [label]` ("stop"): `EventScreen`, its own panel over every scene, a big

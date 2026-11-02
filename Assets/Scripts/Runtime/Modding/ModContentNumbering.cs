@@ -12,16 +12,30 @@ namespace GoF2Remake.Modding
 {
     public static partial class ModContent
     {
+        // Modified: true while EnsureMapping loads the tables for the original counts.
+        static bool loadingForCounts;
+
         /// <summary>The numbers of the active mods' content (again after ModManager.Revision changes).</summary>
         static void EnsureMapping()
         {
             if (mappedRevision == ModManager.Revision && originalItems >= 0 && originalShips >= 0) return;
-            if (originalItems < 0 || originalShips < 0) { Database.Load(); if (originalItems < 0 || originalShips < 0) return; }   // Load sets them
+            if (originalItems < 0 || originalShips < 0)
+            {
+                // Modified: Load applies the mods, which calls this again; with the tables not readable yet (an asset import
+                // before Resources/GoF2Data is imported, e.g. a rebuilt Library) the counts stay unset and the two recursed
+                // until the Editor crashed with a stack overflow. Load once at a time.
+                if (loadingForCounts) return;
+                loadingForCounts = true;
+                try { Database.Load(); } finally { loadingForCounts = false; }
+                if (originalItems < 0 || originalShips < 0) return;   // Load sets them
+            }
+            _ = ModManager.Active;   // read first: the first read may scan the mods, a new revision, and map all this again inside the loops
             mappedRevision = ModManager.Revision;
             itemIndex.Clear(); itemDefAt.Clear(); placeholderItems.Clear(); itemLook.Clear(); itemRenames.Clear(); deedAt.Clear();
             bool session = ModManager.InSession;
             int next = originalItems;
-            foreach (var mod in ModManager.Active)
+            // A session numbers afresh: its mods first, so they keep the numbers they had before there was any base content.
+            foreach (var mod in ModManager.Active.OrderBy(m => m.IsBase))
                 foreach (var d in Parse(mod).items)
                 {
                     if (d.key == null) continue;
@@ -243,6 +257,22 @@ namespace GoF2Remake.Modding
             if (text == null && d.key == null) return false;
             text ??= description ? "" : d.key;
             return true;
+        }
+        /// <summary>Remake (TorchOP's request, 2026-10-23): a mod's tag (mod.json "tag", a string or per language), shown dim
+        /// after the names of what it adds ("Veteran [GoF3]") to tell packs apart; null = none. One per mod: its new ships,
+        /// items, systems and stations (ShipTag, ItemTag, ModWorld.SystemTag / StationTag), never what it only changes.</summary>
+        public static string TagOf(ModInfo mod)
+        {
+            string s = ModManifest.Pick(mod?.Manifest?.tag);
+            return string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        }
+        public static string ShipTag(int index) { EnsureMapping(); return shipDefAt.TryGetValue(index, out var d) ? TagOf(d.mod) : null; }
+        /// <summary>A ship blueprint's item: its ship's tag.</summary>
+        public static string ItemTag(int index)
+        {
+            EnsureMapping();
+            if (deedAt.TryGetValue(index, out var bp)) return TryResolveShip(bp.shipRef, out int ship) ? ShipTag(ship) : null;
+            return itemDefAt.TryGetValue(index, out var d) ? TagOf(d.mod) : null;
         }
         static int LookOf(int index, int depth)
         {

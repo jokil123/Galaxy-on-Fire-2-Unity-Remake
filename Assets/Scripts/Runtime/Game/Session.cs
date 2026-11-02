@@ -245,6 +245,10 @@ namespace GoF2Remake.Data
         public static bool Hardcore;
         /// <summary>This game's identity (a new one at every new game; saved), so a hardcore death finds every slot of the run.</summary>
         public static string RunId = "";
+        /// <summary>Remake: the Space Waste tons the Mining Plant has sorted in this game (WasteProcessing: the next ton's
+        /// roll), the empty ones in a row since the last find and the tons since the last rare find (its bad-luck caps;
+        /// all saved).</summary>
+        public static int WasteTons, WasteDry, WasteSinceRare;
         /// <summary>Remake mods: the mods' new-game options switched on for this game ("mod_id:option_id",
         /// Modding.ModGameOptions; saved).</summary>
         public static HashSet<string> ModGameOptions = new HashSet<string>();
@@ -347,14 +351,46 @@ namespace GoF2Remake.Data
         /// <summary>Galaxy::getVisited: stations the player has docked at (the star map's "Already visited" tick).</summary>
         public static HashSet<int> VisitedStations = new HashSet<int> { 78 };
 
+        /// <summary>Remake mods (the conditions' bought(ship)): the ships the player has bought or built in this game, by
+        /// reference ("12", a mod's "mod:id": the same whatever number the mod's ship has now). Saved.</summary>
+        public static HashSet<string> ShipsBought = new HashSet<string>();
+
+        /// <summary>A ship's reference in ShipsBought.</summary>
+        public static string ShipRef(int ship) => Modding.ModContent.ShipKey(ship) ?? ship.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         /// <summary>Level::programmedStation: the destination picked on the star map, -1 = none. The autopilot routes to it
         /// after the launch / arrival camera (LevelScript::setAutoPilotToProgrammedStation).</summary>
         public static int ProgrammedStation = -1;
+        /// <summary>Remake (jumpgate route planning): the programmed station a gate hop kept, the route under way toward it; while
+        /// ProgrammedStation is still that one, its next gate jumps on without asking (SystemJump). -1 = none; never saved.</summary>
+        public static int RouteDestination = -1;
+        /// <summary>Remake: the route to the programmed station goes round the dangerous systems (picked in the travel dialog,
+        /// StarMapResult.safestRoute), not the fewest jumps: every gate on the way takes GalaxyMap.NextHop's safest hop.</summary>
+        public static bool RouteSafest;
 
         /// <summary>Level doInstantJump / energyCellsForNextJump: the Khador Drive charges for the programmed station
         /// (another system) 5 s into the level, using that many energy cells.</summary>
         public static bool InstantJump;
         public static int EnergyCellsForNextJump;
+        /// <summary>Remake: the next Space scene is interstellar space (InterstellarSpace), not the orbit of StationIndex. Read
+        /// once by SpaceLevel, never saved: a load is always the orbit the ship left.</summary>
+        public static bool EnterInterstellar;
+        /// <summary>Remake: the next Space scene is an arrival out of interstellar space, at speed, with no camera of its own and
+        /// the warp easing out (Visuals.WarpSky). Read once by SpaceLevel, never saved.</summary>
+        public static bool WarpArrival;
+        /// <summary>... from a cruise to the planet of a station in the same system (Navigation.RunPlanet): it faces that planet.</summary>
+        public static bool WarpLocal;
+        /// <summary>Remake: that arrival's ship against its course (Navigation.Leave), so the view doesn't turn at the swap.</summary>
+        public static Quaternion WarpHeading = Quaternion.identity;
+        /// <summary>Remake: the ship came into interstellar space through the Khador Slipstream's hole: no light to fade out,
+        /// the frame was already this level's (World.KhadorFx).</summary>
+        public static bool RiftEntry;
+        /// <summary>Remake: and the chase view in the ship's frame, so the ship stays where it is on the screen.</summary>
+        public static Vector3 WarpView;
+        public static Quaternion WarpViewTurn = Quaternion.identity;
+        /// <summary>Remake: the alien orbit's arrival point (game units) its approach was built around (World.InterstellarField):
+        /// the orbit draws it at random (OrbitLayout landmark 2), so the arrival takes this one. Read once by SpaceLevel.</summary>
+        public static Vector3? WarpArrivalPoint;
 
         /// <summary>Status+0x1dc (Status::jumpgateUsed).</summary>
         public static int JumpgatesUsed;
@@ -470,6 +506,7 @@ namespace GoF2Remake.Data
             ModCampaign = "";
             Hardcore = false;
             RunId = System.Guid.NewGuid().ToString("N");
+            WasteTons = WasteDry = WasteSinceRare = 0;
             ModGameOptions = new HashSet<string>();
             ShipBuilds = new Dictionary<string, string>();
             GraphQuestsDone = new HashSet<string>();
@@ -541,9 +578,18 @@ namespace GoF2Remake.Data
             SystemVisible = null;
             SystemShown = new Dictionary<int, bool>();
             VisitedStations = new HashSet<int> { 78 };
+            ShipsBought = new HashSet<string>();
             ProgrammedStation = -1;
+            RouteDestination = -1;
+            RouteSafest = false;
             InstantJump = false;
             EnergyCellsForNextJump = 0;
+            EnterInterstellar = false;
+            WarpArrival = WarpLocal = false;
+            WarpHeading = WarpViewTurn = Quaternion.identity;
+            RiftEntry = false;
+            WarpView = Vector3.zero;
+            WarpArrivalPoint = null;
             JumpgatesUsed = 0;
             Standing = new[] { 30, 0 };
             ModRaceStanding = new Dictionary<string, int>(System.StringComparer.Ordinal);
